@@ -1,0 +1,13 @@
+name = "Vlasov"
+uuid = "d4286570-51d5-4bbe-9c0b-035637fe1a6e"
+authors = ["Gabriel Birnbaum <gbbinbum@gmail.com> and contributors"]
+version = "0.1.0"
+
+[compat]
+julia = "1"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
