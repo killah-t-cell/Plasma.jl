@@ -1,6 +1,6 @@
-using Vlasov
+using Plasma
 using Test
 
-@testset "Vlasov.jl" begin
+@testset "Plasma.jl" begin
     # Write your tests here.
 end
