@@ -15,7 +15,7 @@ import ModelingToolkit: Interval, infimum, supremum
 # decompose the domain whenever I solve anything
 # Default to retrain when I use the same equation on a different domain and see if it does the job
 
-#= 
+ 
 @parameters t x y z
 @variables u1(..) u2(..) u3(..) w(..)
 Dx = Differential(x)
@@ -51,18 +51,17 @@ eqs = [Dtt(w(t, x, y, z)) ~ a^2 * laplacian_w + ρ(t, x, y, z),
        Dtt(u1(t, x, y, z)) ~ a^2 * laplacian_u1 + J1(t, x, y, z),
        Dtt(u2(t, x, y, z)) ~ a^2 * laplacian_u2 + J2(t, x, y, z),
        Dtt(u3(t, x, y, z)) ~ a^2 * laplacian_u3 + J3(t, x, y, z),
-       a^2 * Dt(w(t, x, y, z)) ~ divergence_u] =#
+       a^2 * Dt(w(t, x, y, z)) ~ divergence_u]
 
 
-       #=
-@parameters t, x[1:3], v[1:3]
+# 1D Vlasov
+@parameters t x v
 @variables fi(..) fe(..) V(..) A1(..) A2(..) A3(..) E1(..) E2(..) E3(..) B1(..) B2(..) B3(..)
 Dxx = Differential(x)^2
 Dx = Differential(x)
 Dtt = Differential(t)^2
 Dt = Differential(t)
 Dv = Differential(v)
-
 
 # Constants
 μ_0 = 1.25663706212e-6 # N A⁻²
@@ -124,7 +123,7 @@ function solve_collisionless_plasma(initial_condition; v_dim=3, x_dim=3, lower_b
 
 
     # return discretization.phi, res
-=#
+
 
 
 function solve_electrostatic_plasma(dim=3)
