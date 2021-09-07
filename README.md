@@ -1,3 +1,3 @@
 # Plasma.jl
 
-(WIP) This packages gives scientists the ability to fully describe and solve collisionless kinetic plasma models.
+(WIP) Plasma.jl gives scientists the ability to fully model collisionless and electrostatic kinetic plasmas.
