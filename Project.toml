@@ -24,6 +24,7 @@ Flux = "0.12"
 GalacticOptim = "2"
 ModelingToolkit = "6"
 Optim = "1"
+Plots = "1"
 Symbolics = "3"
 julia = "1"
 
