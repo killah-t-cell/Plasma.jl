@@ -18,6 +18,7 @@ ProfileView = "c46f51b8-102a-5cf2-8d2c-8597cb0e0da7"
 Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
 
 [compat]
+BSON = "0.3"
 DiffEqFlux = "1"
 DomainSets = "0.5"
 Flux = "0.12"
