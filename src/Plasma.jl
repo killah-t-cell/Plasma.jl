@@ -2,10 +2,10 @@ module Plasma
 
 using Flux
 using ModelingToolkit
-using GalacticOptim
-using DiffEqFlux
-import ModelingToolkit: Interval, infimum, supremum
-
+#using GalacticOptim
+#using DiffEqFlux
+#import ModelingToolkit: Interval, infimum, supremum
+#=
 include("model.jl")
 # give me a domain (of type Interval(i, j))
 # give me a geometry
@@ -36,5 +36,5 @@ end
 function model_plasma(domain, u0; geometry=domain, coils=nothing, dim=3)
     return
 end
-
+=#
 end
