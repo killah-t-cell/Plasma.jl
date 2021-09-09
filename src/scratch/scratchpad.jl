@@ -1,3 +1,4 @@
+#=
 using ModelingToolkit
 using Flux
 using NeuralPDE
@@ -6,8 +7,6 @@ using DiffEqFlux
 using DomainSets
 import ModelingToolkit: Interval, infimum, supremum
 using Plots
-using Profile
-using ProfileView
 
 @parameters t x v
 @variables f(..) E(..) 
@@ -62,7 +61,7 @@ acum =  [0;accumulate(+, length.(initθ))]
 sep = [acum[i]+1 : acum[i+1] for i in 1:length(acum)-1]
 minimizers_ = [res.minimizer[s] for s in sep]
 
-function plot_f(res)
+function plot_f(phi, minimizers_)
     anim = @animate for t ∈ ts
         @info "Animating frame t..."
         u_predict_f = reshape([phi[1]([t,x,v], minimizers_[1])[1] for x in xs for v in vs], length(xs), length(vs))
@@ -72,7 +71,7 @@ function plot_f(res)
     gif(anim,"f.gif", fps=10)
 end
 
-function plot_E(res)
+function plot_E(phi, minimizers_)
     anim = @animate for t ∈ ts
         @info "Animating frame t..."
         u_predict_E = reshape([phi[2]([t,x], minimizers_[2])[1] for x in xs], length(xs))
@@ -82,14 +81,15 @@ function plot_E(res)
     gif(anim,"E.gif", fps=10)
 end
 
-plot_E(res)
-plot_f(res)
+plot_E(phi, minimizers_)
+plot_f(phi, minimizers_)
 
 # Sanity checks
 u_predict_E = [phi[2]([t,x], minimizers_[2])[1] for t in ts for x in xs]
 u_predict_f = [phi[1]([t,x,v], minimizers_[1])[1] for t in ts for x in xs for v in vs]
 
 # Save
+using BSON
 using BSON: @save
 using BSON: @load
 
@@ -100,3 +100,19 @@ prepared_weights = minimizers_
 @save "1D1V_weights.bson" prepared_weights
 loaded_weights = BSON.load("1D1V_weights.bson")[:prepared_weights]
 # ...[phi[2]([t,x,v], loaded_weights[2])[1] for...
+
+plot_f(loaded_phi, loaded_weights)
+
+
+
+using IfElse
+radius_ =10
+function ifelsef(x)
+	if (x < radius_) cos(x) else 0. end
+    # IfElse.ifelse(x < radius_, cos(x), 0.)
+end
+@register ifelsef(x)
+
+ifelsef.(rand(1,10))
+
+=#
