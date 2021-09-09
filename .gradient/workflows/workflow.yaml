@@ -21,8 +21,9 @@ jobs:
       repo: CloneRepo.outputs.repo
     uses: script@v1
     with:
-      script: – julia -e 'using Pkg; Pkg.instantiate()'
-        – julia /inputs/repo/src/Plasma.jl
+      script: |
+        julia -e 'using Pkg; Pkg.instantiate()'
+        julia /inputs/repo/src/Plasma.jl
       image: julia:latest
     env:
       JULIA_PROJECT: "inputs/repo/"
