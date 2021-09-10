@@ -2,11 +2,13 @@ module Plasma
 
 using Flux
 using ModelingToolkit
-#using GalacticOptim
-#using DiffEqFlux
-#import ModelingToolkit: Interval, infimum, supremum
-#=
+using GalacticOptim
+using DiffEqFlux
+using NeuralPDE
+import ModelingToolkit: Interval, infimum, supremum
+
 include("model.jl")
+#=
 # give me a domain (of type Interval(i, j))
 # give me a geometry
 # give me external coils

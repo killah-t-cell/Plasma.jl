@@ -1,11 +1,3 @@
-using ModelingToolkit
-using Flux
-using NeuralPDE
-using GalacticOptim
-using DiffEqFlux
-import ModelingToolkit: Interval, infimum, supremum
-using Plasma
-
 # what is the strategy (the user doesn't need to know), how should it reflect in the boundaries? how many v and x dimensions? what are the bounds
 # in the future we can set a geometry and size of a mesh
 # it should probably start with an empty mesh, I can add the plasma geometry to the mesh, then add magnets to the mesh, and solve in the mesh which initializes all moving parts.
