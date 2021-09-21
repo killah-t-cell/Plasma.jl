@@ -67,7 +67,7 @@ der_ = [Dx(Φ(t,x,y,z)) ~ DxΦ(t,x,y,z),
         Dz(Φ(t,x,y,z)) ~ DzΦ(t,x,y,z)]
 
 # Boundaries and initial conditions
-bcs_ = [f(0,x,y,z,vx,vy,vz) ~ set_initial_geometry(x,y,z) * (π*v_th^2)^(-3/2) * exp(-((vx + vy + vz)/3)^2/(v_th^2)), # Maxwellian for now averaging 3 components of velocity
+bcs_ = [f(0,x,y,z,vx,vy,vz) ~ set_initial_geometry(x,y,z) * (π*v_th^2)^(-3/2) * exp(-((vx + vy + vz)/3)^2/(v_th^2)), # Maxwellian for now averaging 3 components of
        Φ(0,x,y,z) ~ set_initial_geometry(x,y,z) * e*n_0/ε_0 * Iv(f(0,x,y,z,vx,vy,vz))] # we may need to change this to the analytical Green's solution
 
 bcs__ = [bcs_;der_]

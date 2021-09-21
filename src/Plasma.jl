@@ -21,7 +21,10 @@ struct LinearGeometry{ T } # <: Geometry
 
 end
 # coils just really mean that at point x the magnetic field is equal to B(x) = B_plasma + B_coil. The same goes for E
-struct Coils{ T } # <: Geometry
+struct Coils{ T } 
+
+end
+struct Walls{ T } 
 
 end
 
