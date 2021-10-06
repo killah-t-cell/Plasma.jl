@@ -30,18 +30,21 @@ end
 function decompose_domains(dim=3)
 end
 
+#v1
 # give me a domain (of type Interval(i, j))
 # give me a geometry
+# give me initial conditions (for f)
+
+#>v2
 # give me external coils
 # give me external forces (for ICF)
-# give me initial conditions
 # give me the properties on the boundaries
 # and I give you how this plasma will move with time
 
 # what is the strategy (the user doesn't need to know), how should it reflect in the boundaries? how many v and x dimensions? what are the bounds
 # in the future we can set a geometry and size of a mesh
 # it should probably start with an empty mesh, I can add the plasma geometry to the mesh, then add magnets to the mesh, and solve in the mesh which initializes all moving parts.
-function solve_collisionless_plasma()
+function solve_collisionless_plasma(geometry::Function, lb, ub, initial_condition_fe, initial_condition_fi=initial_condition_fe ;time_lb=lb, time_ub=ub)
     # if lower bound is higher than upper bound
     # throw error with message
 

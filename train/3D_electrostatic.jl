@@ -10,6 +10,8 @@ using Plots
 using LinearAlgebra
 using CUDA
 
+GPU = true
+
 @parameters t x y z vx vy vz
 @variables f(..) Φ(..)
 @variables DxΦ(..),DyΦ(..),DzΦ(..)
@@ -50,13 +52,15 @@ domains = [t ∈ Interval(0.0, 1.0),
            vz ∈ Interval(0.0, 1.0)]
 
 # Integrals
-Iv = Integral((vx,vy,vz) in DomainSets.ProductDomain(ClosedInterval(0 ,1), ClosedInterval(0 ,1), ClosedInterval(0 ,1)))
-Ix = Integral((x,y,z) in DomainSets.ProductDomain(ClosedInterval(0 ,1), ClosedInterval(0 ,1), ClosedInterval(0 ,1)))
+# Iv = Integral((vx,vy,vz) in DomainSets.ProductDomain(ClosedInterval(-1 ,1), ClosedInterval(-1 ,1), ClosedInterval(-1 ,1)))
+Iv = Integral((vx,vy,vz) in DomainSets.ProductDomain(ClosedInterval(-Inf ,Inf), ClosedInterval(-Inf ,Inf), ClosedInterval(-Inf ,Inf)))
 
 # Equations
 E = [Dx(Φ(t,x,y,z)), Dy(Φ(t,x,y,z)), Dz(Φ(t,x,y,z))]
-Divx_v = Dx(vx * f(t,x,y,z,vx,vy,vz)) + Dy(vy * f(t,x,y,z,vx,vy,vz)) + Dz(vz * f(t,x,y,z,vx,vy,vz))
-Divv_F = Dx(e/m_e * E[1] * f(t,x,y,z,vx,vy,vz)) + Dy(e/m_e * E[2] * f(t,x,y,z,vx,vy,vz)) + Dz(e/m_e * E[3] * f(t,x,y,z,vx,vy,vz))
+Divx_v = vx * Dx(f(t,x,y,z,vx,vy,vz)) + vy * Dy(f(t,x,y,z,vx,vy,vz)) + vz * Dz(f(t,x,y,z,vx,vy,vz))
+F = e/m_e .* E
+DfDv = [Dvx(f(t,x,y,z,vx,vy,vz)), Dvy(f(t,x,y,z,vx,vy,vz)), Dvz(f(t,x,y,z,vx,vy,vz))]
+Divv_F = dot(F, DfDv)
 ∇²Φ = Dx(DxΦ(t,x,y,z)) + Dy(DyΦ(t,x,y,z)) + Dz(DzΦ(t,x,y,z))
 
 eqs = [Dt(f(t,x,y,z,vx,vy,vz)) ~ - Divx_v - Divv_F
@@ -68,14 +72,15 @@ der_ = [Dx(Φ(t,x,y,z)) ~ DxΦ(t,x,y,z),
 
 # Boundaries and initial conditions
 bcs_ = [f(0,x,y,z,vx,vy,vz) ~ set_initial_geometry(x,y,z) * (π*v_th^2)^(-3/2) * exp(-((vx + vy + vz)/3)^2/(v_th^2)), # Maxwellian for now averaging 3 components of
-       Φ(0,x,y,z) ~ set_initial_geometry(x,y,z) * e*n_0/ε_0 * Iv(f(0,x,y,z,vx,vy,vz))] # we may need to change this to the analytical Green's solution
+       Φ(0,x,y,z) ~ set_initial_geometry(x,y,z) * e*n_0/ε_0 * Iv(f(0,x,y,z,vx,vy,vz))]
 
 bcs__ = [bcs_;der_]
 
 # Neural Network
+CUDA.allowscalar(false)
 chain = [FastChain(FastDense(7, 16, Flux.σ), FastDense(16,16,Flux.σ), FastDense(16, 1));
          [FastChain(FastDense(4, 16, Flux.σ), FastDense(16,16,Flux.σ), FastDense(16, 1)) for _ in 1:4]]
-initθ = map(c -> Float64.(c), DiffEqFlux.initial_params.(chain)) # initθ = map(c -> CuArray(Float64.(c)), DiffEqFlux.initial_params.(chain))
+initθ = GPU ? map(c -> CuArray(Float64.(c)), DiffEqFlux.initial_params.(chain)) : map(c -> Float64.(c), DiffEqFlux.initial_params.(chain)) 
 
 discretization = NeuralPDE.PhysicsInformedNN(chain, QuadratureTraining(), init_params=initθ)
 vars = [f(t,x,y,z,vx,vy,vz), Φ(t,x,y,z), DxΦ(t,x,y,z), DyΦ(t,x,y,z), DzΦ(t,x,y,z)]

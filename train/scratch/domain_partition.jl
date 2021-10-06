@@ -1,3 +1,9 @@
+
+# cb
+cb = function (p,l)
+    println("Current loss is: $l")
+    return false
+end
 ##### WITH DOMAIN DECOMPOSITION
 using ModelingToolkit
 using Flux
@@ -40,17 +46,11 @@ domains = [t ∈ t_domain,
            x ∈ x_domain, 
            v ∈ v_domain]
 
-# Equations
 eqs = [Dt(f(t,x,v)) ~ - v * Dx(f(t,x,v)) - e/m_e * E(t,x) * Dv(f(t,x,v))
        Dx(E(t,x)) ~ e*n_0/ε_0 * (Dt(f(t,x,v)) - 1)]
 
-
-function set_boundaries(t_0)
-    bcs = [f(t_0,x,v) ~ 1/(v_th * sqrt(2π)) * exp(-v^2/(2*v_th^2)), 
-           E(t_0,x) ~ e*n_0/ε_0 * (Dt(f(0,x,v)) - 1)]
-end
-
-bcs = set_boundaries(0)
+bcs = [f(t_min,x,v) ~ 1/(v_th * sqrt(2π)) * exp(-v^2/(2*v_th^2)), 
+       E(t_min,x) ~ e*n_0/ε_0 * (Dt(f(0,x,v)) - 1)]
 
 # Neural Network
 chains = [[FastChain(FastDense(3, 16, Flux.σ), FastDense(16,16,Flux.σ), FastDense(16, 1)), 
@@ -71,21 +71,15 @@ domains_map = map(ts_domain) do (ts_dom)
                 v ∈ v_domain]
 end
 
-#=
-function create_bcs(t_domain_)
-    t_0 = t_domain_.left
-    set_boundaries(t_0)
-end
-=#
-function create_bcs(bcs,t_domain_,phi_bound)
+function create_bcs(t_domain_,f_bound,E_bound)
     t_0, t_e =  t_domain_.left, t_domain_.right
     if t_0 == 0.0
-        bcs = [f(t_0,x,v) ~ set_initial_geometry(x) * 1/(v_th * sqrt(2π)) * exp(-v^2/(2*v_th^2)), 
-               E(t_0,x) ~ set_initial_geometry(x) * e*n_0/ε_0 * (Iv(f(0,x,v)) - 1)]
+        bcs = [f(t_0,x,v) ~ 1/(v_th * sqrt(2π)) * exp(-v^2/(2*v_th^2)),
+               E(t_0,x) ~ e*n_0/ε_0 * (Dt(f(0,x,v)) - 1)]
         return bcs
     end
-    bcs = [f(t_0,x,v) ~ phi_bound(t_0,x,v),
-           E(t_0,x) ~ set_initial_geometry(x) * e*n_0/ε_0 * (Iv(f(0,x,v)) - 1)]
+    bcs = [f(t_0,x,v) ~ f_bound(t_0,x,v),
+           E(t_0,x) ~ E_bound(t_0,x)]
     bcs
 end
 
@@ -93,21 +87,31 @@ reses = []
 phis = []
 pde_system_map = []
 
-# cb
-cb = function (p,l)
-    println("Current loss is: $l")
-    return false
-end
-
+# LoadError: MethodError: objects of type Vector{NeuralPDE.var"#270#272"{FastChain{Tuple{FastDense{typeof(σ), DiffEqFlux.var"#initial_params#82"{Vector{Float32}}}, FastDense{typeof(σ), DiffEqFlux.var"#initial_params#82"{Vector{Float32}}}, FastDense{typeof(identity), DiffEqFlux.var"#initial_params#82"{Vector{Float32}}}}}, UnionAll}} are not callable
 for i in 1:count_decomp
     println("decomposition $i")
     domains_ = domains_map[i]
 
-    phi_in(cord) = phis[i-1](cord,reses[i-1].minimizer)
-    phi_bound(t,x,v) = phi_in(vcat(t,x,v))
-    @register phi_bound(t,x,v)
-    Base.Broadcast.broadcasted(::typeof(phi_bound), t,x,v) = phi_bound(t,x,v)
-    bcs_ = create_bcs(domains_[1].domain)
+    function f_in(cord) 
+        acum =  [0;accumulate(+, length.(initθ[i]))]
+        sep = [acum[j]+1 : acum[j+1] for j in 1:length(acum)-1]
+        minimizers_ = [reses[i-1].minimizer[s] for s in sep]
+        phis[i-1](cord,minimizers_[1])
+    end
+
+    function E_in(cord) 
+        acum =  [0;accumulate(+, length.(initθ[i]))]
+        sep = [acum[j]+1 : acum[j+1] for j in 1:length(acum)-1]
+        minimizers_ = [reses[i-1].minimizer[s] for s in sep]
+        phis[i-1](cord,minimizers_[2])
+    end
+    f_bound(t,x,v) = f_in(vcat(t,x,v))
+    E_bound(t,x) = E_in(vcat(t,x))
+    @register f_bound(t,x,v)
+    @register E_bound(t,x)
+    Base.Broadcast.broadcasted(::typeof(f_bound), t,x,v) = f_bound(t,x,v)
+    Base.Broadcast.broadcasted(::typeof(E_bound), t,x) = E_bound(t,x)
+    bcs_ = create_bcs(domains_[1].domain, f_bound, E_bound)
     @named pde_system_ = PDESystem(eqs, bcs_, domains_, [t,x,v], [f(t,x,v), E(t,x)])
     push!(pde_system_map,pde_system_)
     strategy = NeuralPDE.QuadratureTraining()
@@ -182,7 +186,7 @@ u_predict_sub_E = [first(phis[i][2]([t_,x],minimizers_[2])) for x in xs]
 
 losses = map(1:count_decomp) do i
     minimizers_ = [reses[i].minimizer[s] for s in sep]
-    loss(cord,θ) = chain2[1](cord,θ) .- phis[i](cord,minimizers_[1])
+    loss(cord,θ) = [chain2[1](cord,θ) .- phis[i](cord,minimizers_[1]), loss(cord,θ) = chain2[2](cord,θ) .- phis[i](cord,minimizers_[2])]
 end
 
 pde_system_map[3].bcs
