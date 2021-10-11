@@ -8,7 +8,7 @@ import ModelingToolkit: Interval, infimum, supremum
 using Plots
 using CUDA
 
-GPU = true
+GPU = false
 
 @parameters t x v
 @variables f(..) E(..) 
@@ -30,7 +30,7 @@ domains = [t ∈ Interval(0.0, 1.0),
            v ∈ Interval(0.0, 1.0)]
 
 # Integrals
-Iv = Integral(v in DomainSets.ClosedInterval(-1, 1)) 
+Iv = Integral(v in DomainSets.ClosedInterval(-Inf, Inf)) 
 
 # Equations
 eqs = [Dt(f(t,x,v)) ~ - v * Dx(f(t,x,v)) - e/m_e * E(t,x) * Dv(f(t,x,v))
