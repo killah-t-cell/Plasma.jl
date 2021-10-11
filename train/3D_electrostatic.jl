@@ -52,7 +52,6 @@ domains = [t ∈ Interval(0.0, 1.0),
            vz ∈ Interval(0.0, 1.0)]
 
 # Integrals
-# Iv = Integral((vx,vy,vz) in DomainSets.ProductDomain(ClosedInterval(-1 ,1), ClosedInterval(-1 ,1), ClosedInterval(-1 ,1)))
 Iv = Integral((vx,vy,vz) in DomainSets.ProductDomain(ClosedInterval(-Inf ,Inf), ClosedInterval(-Inf ,Inf), ClosedInterval(-Inf ,Inf)))
 
 # Equations
