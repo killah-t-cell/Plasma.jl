@@ -7,16 +7,18 @@ using DomainSets
 import ModelingToolkit: Interval, infimum, supremum
 using Parameters
 using Plots
+using LinearAlgebra
 using CUDA
 using BSON: @save
 using BSON: @load
-@with_kw struct PlasmaParameters{T, F}
-    geometry::F 
-    T::Float64 # Kelvin
-    IC_e::F
-    IC_i::F
+@with_kw struct PlasmaParameters{T}
+    temperature::Float64 # Kelvin
+    geometry
+    IC_e
+    IC_i = IC_e
     v_drift::Vector{T} = zeros(3)
     m_i::Float64 = 3.3435837724e-27
+    # TODO add Z
 end
 
 # Boundaries
@@ -57,14 +59,14 @@ High temperature means ->
 
 For more information: https://doi.org/10.1137/1.9781611971477
 """
-function solve_collisionless_plasma(params, lb, ub, time_lb=lb, time_ub=ub, GPU=true)
+function solve_collisionless_plasma(params, lb, ub; time_lb=lb, time_ub=ub, GPU=true)
     if lb > ub
         error("lower bound must be larger than upper bound")
     end
 
-    if ic_fe(args...) < 0 || ic_fi(args...) < 0
-        error("distribution function must be greater than 0")
-    end
+    #if params.IC_e(args...) < 0 || params.IC_i(args...) < 0
+    #    error("distribution function must be greater than 0")
+    #end
 
     @parameters t x y z vx vy vz
     @variables fe(..) fi(..) Ex(..) Ey(..) Ez(..) Bx(..) By(..) Bz(..)
@@ -76,19 +78,15 @@ function solve_collisionless_plasma(params, lb, ub, time_lb=lb, time_ub=ub, GPU=
     Dvz = Differential(vz)
     Dt = Differential(t)
 
-    # Registrations
-    v_drift = params.v_drift
-    @register params.geometry(x,y,z)
-    @register params.IC_e(vx,vy,vz,T,m, v_drift)
-    @register params.IC_i(vx,vy,vz,T,m, v_drift)
-
     # Constants
     μ_0 = 1.25663706212e-6 # N A⁻²
     ε_0 = 8.8541878128e-12 # F ms⁻¹
     q_e   = 1.602176634e-19 # Coulombs
     q_i   = 1.602176634e-19 # Coulombs
     m_e = 9.10938188e-31 # Kg
-    m_i = 3.3435837724e-27 # Deuterium mass
+    m_i = params.m_i # Deuterium mass
+    v_drift = params.v_drift
+    T = params.temperature
 
     # Space
     domains = [t ∈ Interval(time_lb, time_ub),
@@ -134,34 +132,33 @@ function solve_collisionless_plasma(params, lb, ub, time_lb=lb, time_ub=ub, GPU=
            Div_B ~ 0]
     
     # Boundaries and initial conditions
-    bcs_ = [fe(0,x,y,z,vx,vy,vz) ~ ic_fe(vx,vy,vz,T,m, v_drift) * geometry(x, y, z),
-            fi(0,x,y,z,vx,vy,vz) ~ ic_fi(vx,vy,vz,T,m, v_drift) * geometry(x, y, z), 
+    bcs = [fe(0,x,y,z,vx,vy,vz) ~ params.IC_e(vx,vy,vz,T,m_e, v_drift) * params.geometry(x, y, z),
+            fi(0,x,y,z,vx,vy,vz) ~ params.IC_i(vx,vy,vz,T,m_i, v_drift) * params.geometry(x, y, z), 
             Div_B ~ 0,
-            Div_E ~ (q_e * Iv(fe(0,x,y,z,vx,vy,vz)) + q_i * Iv(fi(0,x,y,z,vx,vy,vz)))/ε_0 * geometry(x, y, z)] 
-    
-    bcs__ = [bcs_;der_]
-    
+            Div_E ~ (q_e * Iv(fe(0,x,y,z,vx,vy,vz)) + q_i * Iv(fi(0,x,y,z,vx,vy,vz)))/ε_0 * params.geometry(x, y, z)] 
+        
     # Neural Network
     CUDA.allowscalar(false)
     chain = [[FastChain(FastDense(7, 16, Flux.σ), FastDense(16,16,Flux.σ), FastDense(16, 1)) for _ in 1:2];
-            [FastChain(FastDense(4, 16, Flux.σ), FastDense(16,16,Flux.σ), FastDense(16, 1)) for _ in 1:20]]
+            [FastChain(FastDense(4, 16, Flux.σ), FastDense(16,16,Flux.σ), FastDense(16, 1)) for _ in 1:8]]
     initθ = GPU ? map(c -> CuArray(Float64.(c)), DiffEqFlux.initial_params.(chain)) : map(c -> Float64.(c), DiffEqFlux.initial_params.(chain)) 
     
     discretization = NeuralPDE.PhysicsInformedNN(chain, QuadratureTraining(), init_params=initθ)
     vars = [fe(t,x,y,z,vx,vy,vz), fi(t,x,y,z,vx,vy,vz), Ex(t,x,y,z), Ey(t,x,y,z), Ez(t,x,y,z), Bx(t,x,y,z), By(t,x,y,z), Bz(t,x,y,z)]
-    @named pde_system = PDESystem(eqs, bcs__, domains, [t,x,y,z,vx,vy,vz], vars)
+    @named pde_system = PDESystem(eqs, bcs, domains, [t,x,y,z,vx,vy,vz], vars)
     prob = SciMLBase.discretize(pde_system, discretization)
-
-    cb = function (p,l)
-        println("Current loss is: $l")
-        return false
-    end
 
     # Solve
     opt = Optim.BFGS()
     res = GalacticOptim.solve(prob, opt, cb = cb, maxiters=1000)
     phi = discretization.phi
-    return phi, res
+    return phi, res, initθ
+end
+
+# Output training
+cb = function (p,l)
+    println("Current loss is: $l")
+    return false
 end
 
 # Save & load methods
@@ -192,7 +189,6 @@ function plot_E_1D(phi, minimizers_, model_name="")
     end
     gif(anim,model_name*"E.gif", fps=10)
 end
-
 
 function plot_f_1D(phi, minimizers_, model_name="")
     anim = @animate for t ∈ ts
