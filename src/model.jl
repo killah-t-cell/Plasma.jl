@@ -11,6 +11,9 @@ using LinearAlgebra
 using CUDA
 using BSON: @save
 using BSON: @load
+
+# TODO support more parameters?
+# TODO support multi-species plasma
 @with_kw struct PlasmaParameters{T}
     temperature::Float64 # Kelvin
     geometry
@@ -18,17 +21,18 @@ using BSON: @load
     IC_i = IC_e
     v_drift::Vector{T} = zeros(3)
     m_i::Float64 = 3.3435837724e-27
-    # TODO add Z
+    Z_i::Int16 = 1 # valid for hydrogen or deuterium
+    q_i::Float64 = Z * 1.602176634e-19
 end
 
-# Boundaries
+#### Boundaries ####
 function set_boundaries(type)
     # reflective
     # damped
     # periodic
 end
 
-# Distribution functions
+#### Distribution functions ####
 """
 Maxwellian velocity distribution in 3 dimensions
 """
@@ -49,7 +53,7 @@ function maxwellian_1D(v,T,v_th, v_drift)
     return (π*v_th^2)^(-3/2) * exp(-(v - v_drift)^2/v_th^2)
 end
 
-# Models
+#### Models ####
 """
 Solves a collisionless plasma with 2 species in 6 dimensions
 
@@ -59,6 +63,7 @@ High temperature means ->
 
 For more information: https://doi.org/10.1137/1.9781611971477
 """
+# TODO maybe separate system definition (parameters, variables, Differentials, domains, eqs, bcs, etc from solver?)
 function solve_collisionless_plasma(params, lb, ub; time_lb=lb, time_ub=ub, GPU=true)
     if lb > ub
         error("lower bound must be larger than upper bound")
@@ -78,12 +83,12 @@ function solve_collisionless_plasma(params, lb, ub; time_lb=lb, time_ub=ub, GPU=
     Dvz = Differential(vz)
     Dt = Differential(t)
 
-    # Constants
+    # Constants # TODO turn into struct and pass it here
     μ_0 = 1.25663706212e-6 # N A⁻²
     ε_0 = 8.8541878128e-12 # F ms⁻¹
     q_e   = 1.602176634e-19 # Coulombs
-    q_i   = 1.602176634e-19 # Coulombs
     m_e = 9.10938188e-31 # Kg
+    q_i   = params.q_i # Coulombs
     m_i = params.m_i # Deuterium mass
     v_drift = params.v_drift
     T = params.temperature
@@ -148,20 +153,34 @@ function solve_collisionless_plasma(params, lb, ub; time_lb=lb, time_ub=ub, GPU=
     @named pde_system = PDESystem(eqs, bcs, domains, [t,x,y,z,vx,vy,vz], vars)
     prob = SciMLBase.discretize(pde_system, discretization)
 
+    pde_inner_loss_functions = prob.f.f.loss_function.pde_loss_function.pde_loss_functions.contents
+    bcs_inner_loss_functions = prob.f.f.loss_function.bcs_loss_function.bc_loss_functions.contents
+
+    cb = function (p,l)
+        println("Current loss is: $l")
+        println("pde_losses: ", map(l_ -> l_(p), pde_inner_loss_functions))
+        println("bcs_losses: ", map(l_ -> l_(p), bcs_inner_loss_functions))
+        return false
+    end
+
     # Solve
     opt = Optim.BFGS()
-    res = GalacticOptim.solve(prob, opt, cb = cb, maxiters=1000)
+    res = GalacticOptim.solve(prob, opt, cb = cb, maxiters=200)
+    prob = remake(prob, u0=res.minimizer)
+    res = GalacticOptim.solve(prob, ADAM(0.01), cb = cb, maxiters=10000)
+    prob = remake(prob, u0=res.minimizer)
+    res = GalacticOptim.solve(prob, opt, cb = cb, maxiters=200)
     phi = discretization.phi
     return phi, res, initθ
 end
 
-# Output training
+#### Output training ####
 cb = function (p,l)
     println("Current loss is: $l")
     return false
 end
 
-# Save & load methods
+#### Save & load methods ####
 function save_results(phi, res, model_name)
     @save model_name*"_phi.bson" phi
     minimizers_ = [res.minimizer[s] for s in sep]
@@ -174,8 +193,7 @@ function load_results(phi_path, minimizers_path)
     return loaded_phi, loaded_weights
 end
 
-# Plotting functions
-# TODO maybe unite these function so one function plots f, E, and B
+#### Plot ####
 function plot_3D(phi, minimizers_, model_name="")
     # plots f, E, B    
 end
@@ -200,8 +218,68 @@ function plot_f_1D(phi, minimizers_, model_name="")
     gif(anim,model_name*"f.gif", fps=10)
 end
 
-function solve_electrostatic_plasma(dim=3)
-    return
+function solve_1D_electrostatic_plasma(params, lb, ub; time_lb=lb, time_ub=ub, GPU=true)
+    @parameters t x v
+    @variables f(..) E(..) 
+    Dx = Differential(x)
+    Dt = Differential(t)
+    Dv = Differential(v)
+
+    # Constants
+    ε_0 = 8.8541878128e-12 # F ms⁻¹
+    e   = 1.602176634e-19 # Coulombs
+    m_e = 9.10938188e-31 # Kg
+    n_0 = 1
+
+    # Space
+    domains = [t ∈ Interval(time_lb, time_ub),
+            x ∈ Interval(lb, ub), 
+            v ∈ Interval(lb, ub)]
+
+    # Integrals
+    Iv = Integral(v in DomainSets.ClosedInterval(-Inf, Inf)) 
+
+    # Equations
+    eqs = [Dt(f(t,x,v)) ~ - v * Dx(f(t,x,v)) - e/m_e * E(t,x) * Dv(f(t,x,v))
+        Dx(E(t,x)) ~ e*n_0/ε_0 * (Iv(f(t,x,v)) - 1)]
+
+    bcs = [f(0,x,v) ~ params.geometry(v) * params.IC(v),
+        E(0,x) ~ params.geometry(v) * e*n_0/ε_0 * (Iv(f(0,x,v)) - 1) * x,
+        E(t,0) ~ 0]
+
+
+    # Neural Network
+    CUDA.allowscalar(false)
+    chain = [FastChain(FastDense(3, 16, Flux.σ), FastDense(16,16,Flux.σ), FastDense(16, 1)),
+            FastChain(FastDense(2, 16, Flux.σ), FastDense(16,16,Flux.σ), FastDense(16, 1))]
+
+    initθ = GPU ? map(c -> CuArray(Float64.(c)), DiffEqFlux.initial_params.(chain)) : map(c -> Float64.(c), DiffEqFlux.initial_params.(chain)) 
+
+
+    discretization = NeuralPDE.PhysicsInformedNN(chain, QuadratureTraining(), init_params= initθ)
+    @named pde_system = PDESystem(eqs, bcs, domains, [t,x,v], [f(t,x,v), E(t,x)])
+    prob = SciMLBase.discretize(pde_system, discretization)
+
+    # Solve
+    pde_inner_loss_functions = prob.f.f.loss_function.pde_loss_function.pde_loss_functions.contents
+    bcs_inner_loss_functions = prob.f.f.loss_function.bcs_loss_function.bc_loss_functions.contents
+
+    cb = function (p,l)
+        println("Current loss is: $l")
+        println("pde_losses: ", map(l_ -> l_(p), pde_inner_loss_functions))
+        println("bcs_losses: ", map(l_ -> l_(p), bcs_inner_loss_functions))
+        return false
+    end
+
+    opt = Optim.BFGS()
+    res = GalacticOptim.solve(prob, opt, cb = cb, maxiters=200)
+    prob = remake(prob, u0=res.minimizer)
+    res = GalacticOptim.solve(prob, ADAM(0.01), cb = cb, maxiters=10000)
+    prob = remake(prob, u0=res.minimizer)
+    res = GalacticOptim.solve(prob, opt, cb = cb, maxiters=200)
+    phi = discretization.phi
+
+    return phi, res, initθ
 end
 
 

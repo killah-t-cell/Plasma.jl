@@ -8,7 +8,7 @@ import ModelingToolkit: Interval, infimum, supremum
 using Plots
 using CUDA
 
-GPU = false
+GPU = true
 
 @parameters t x v
 @variables f(..) E(..) 
@@ -60,13 +60,22 @@ discretization = NeuralPDE.PhysicsInformedNN(chain, QuadratureTraining(), init_p
 prob = SciMLBase.symbolic_discretize(pde_system, discretization)
 prob = SciMLBase.discretize(pde_system, discretization)
 
-# cb
+pde_inner_loss_functions = prob.f.f.loss_function.pde_loss_function.pde_loss_functions.contents
+bcs_inner_loss_functions = prob.f.f.loss_function.bcs_loss_function.bc_loss_functions.contents
+
 cb = function (p,l)
     println("Current loss is: $l")
+    println("pde_losses: ", map(l_ -> l_(p), pde_inner_loss_functions))
+    println("bcs_losses: ", map(l_ -> l_(p), bcs_inner_loss_functions))
     return false
 end
 
 # Solve
 opt = Optim.BFGS()
-res = GalacticOptim.solve(prob, opt, cb = cb, maxiters=1000) # the code errors here
+res = GalacticOptim.solve(prob, opt, cb = cb, maxiters=200)
+prob = remake(prob, u0=res.minimizer)
+res = GalacticOptim.solve(prob, ADAM(0.01), cb = cb, maxiters=10000)
+prob = remake(prob, u0=res.minimizer)
+res = GalacticOptim.solve(prob, opt, cb = cb, maxiters=200)
 phi = discretization.phi
+

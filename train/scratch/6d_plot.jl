@@ -120,6 +120,11 @@ anim_f_x = @animate for t ∈ ts
 end
 gif(anim_f_x,"f_x.gif", fps=10)
 
+
+u_predict = collect(Array(phi[1]([t,x,y,z,vx,vy,vz], minimizers_[1]))[1] for x in xs, y in ys, z in zs)
+
+
+
 anim_f_v = @animate for t ∈ ts
     @info "Animating frame t..."
     u_predict_f = reshape([phi[1]([t,x,y,z,vx,vy,vz], minimizers_[1])[1] for x in xs for y in ys for z in zs for vx in vxs for vy in vys for vz in vzs], length(xs), length(ys), length(zs),length(vxs), length(vys), length(vzs))

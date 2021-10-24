@@ -87,13 +87,25 @@ vars = [f(t,x,y,z,vx,vy,vz), Φ(t,x,y,z), DxΦ(t,x,y,z), DyΦ(t,x,y,z), DzΦ(t,x
 prob = SciMLBase.symbolic_discretize(pde_system, discretization)
 prob = SciMLBase.discretize(pde_system, discretization)
 
+pde_inner_loss_functions = prob.f.f.loss_function.pde_loss_function.pde_loss_functions.contents
+inner_loss_functions = prob.f.f.loss_function.bcs_loss_function.bc_loss_functions.contents
+bcs_inner_loss_functions = inner_loss_functions[1:2]
+aprox_derivative_loss_functions = inner_loss_functions[3:end]
+
 cb = function (p,l)
-    println("Current loss is: $l")
+    println("loss: ", l )
+    println("pde_losses: ", map(l_ -> l_(p), pde_inner_loss_functions))
+    println("bcs_losses: ", map(l_ -> l_(p), bcs_inner_loss_functions))
+    println("der_losses: ", map(l_ -> l_(p), aprox_derivative_loss_functions))
     return false
 end
 
 # Solve
 opt = Optim.BFGS()
-res = GalacticOptim.solve(prob, opt, cb = cb, maxiters=1000)
+res = GalacticOptim.solve(prob, opt, cb = cb, maxiters=200)
+prob = remake(prob, u0=res.minimizer)
+res = GalacticOptim.solve(prob, ADAM(0.01), cb = cb, maxiters=10000)
+prob = remake(prob, u0=res.minimizer)
+res = GalacticOptim.solve(prob, opt, cb = cb, maxiters=200)
 phi = discretization.phi
 
