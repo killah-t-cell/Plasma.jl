@@ -94,71 +94,42 @@ end
 
 # Solve
 opt = Optim.BFGS()
-res = GalacticOptim.solve(prob, opt, cb = cb, maxiters=2)
+res = GalacticOptim.solve(prob, opt, cb = cb, maxiters=200)
 phi = discretization.phi
 
-# Plot
 ts, xs, ys, zs, vxs, vys, vzs = [infimum(d.domain):0.1:supremum(d.domain) for d in domains]
 acum =  [0;accumulate(+, length.(initθ))]
 sep = [acum[i]+1 : acum[i+1] for i in 1:length(acum)-1]
 minimizers_ = [res.minimizer[s] for s in sep]
 
-anim_Φ = @animate for t ∈ ts
-    @info "Animating frame t..."
-    u_predict_Φ = reshape([phi[2]([t,x,y,z], minimizers_[2])[1] for x in xs for y in ys for z in zs], length(xs), length(ys), length(zs))
-    #p1 = plot(xs, ys, zs, u_predict_E, label="", title="E")
-    p1 = plot(xs,ys,zs, line_z = u_predict_Φ)
-    plot(p1)
+###### Possible solution
+u_predict = collect(Array(phi[1]([t,x,y,z,vx,vy,vz], minimizers_[1]))[1] for t in ts, x in xs, y in ys, z in zs, vx in vxs, vy in vys, vz in vzs)
+
+u_predict_x
+
+u_predict_x = u_predict[:,:,:,:,1,1,1]
+u_predict_v = u_predict[:,1,1,1,:,:,:]
+
+anim = @animate for t ∈ eachindex(ts)
+    p1 = scatter(u_predict_x[t,:,1,1], u_predict_x[t,1,:,1], u_predict_x[t,1,1,:])
+    p2 = scatter(u_predict_v[t,:,1,1], u_predict_v[t,1,:,1], u_predict_v[t,1,1,:])
+    plot(p1,p2)
 end
-gif(anim_Φ,"Phi.gif", fps=10)
+gif(anim,"result.gif", fps=10)
 
-anim_f_x = @animate for t ∈ ts
-    @info "Animating frame t..."
-    u_predict_f = reshape([phi[1]([t,x,y,z,vx,vy,vz], minimizers_[1])[1] for x in xs for y in ys for z in zs for vx in vxs for vy in vys for vz in vzs], length(xs), length(ys), length(zs),length(vxs), length(vys), length(vzs))
-    p2 = plot(xs, ys, zs, line_z=u_predict_f, label="", title="f_x")
-    plot(p2)
-end
-gif(anim_f_x,"f_x.gif", fps=10)
+res.u # are the weights of the neural Network
 
+@show phi[1]
 
-u_predict = collect(Array(phi[1]([t,x,y,z,vx,vy,vz], minimizers_[1]))[1] for x in xs, y in ys, z in zs)
+phi[1](0.2, minimizers_[1])
+phi[2](0.3, minimizers_[2])
 
 
+u_predict_test = [reshape([first(phi[2]([t,x,y,z],minimizers_[2])) for x in xs  for y in ys for z in zs], (length(xs),length(ys), length(zs)))  for t in ts]
+anim = @animate for i=1:length(ts)
+    p1 = plot(xs, ys, u_real[i], st=:surface, title = "real");
+    p2 = plot(xs, ys, u_predict[i], st=:surface,title = "predict, t = $(ts[i])");
+    plot(p1,p2)
+  end
 
-anim_f_v = @animate for t ∈ ts
-    @info "Animating frame t..."
-    u_predict_f = reshape([phi[1]([t,x,y,z,vx,vy,vz], minimizers_[1])[1] for x in xs for y in ys for z in zs for vx in vxs for vy in vys for vz in vzs], length(xs), length(ys), length(zs),length(vxs), length(vys), length(vzs))
-    p2 = plot(vxs, vys, vzs, line_z=u_predict_f, label="", title="f_v")
-    plot(p2)
-end
-gif(anim_f_v,"f_v.gif", fps=10)
-
-
-function plot_3D(phi, res, initθ,  model_name="")
-    ts, xs, ys, zs, vxs, vys, vzs = [infimum(d.domain):0.1:supremum(d.domain) for d in domains]
-    acum =  [0;accumulate(+, length.(initθ))]
-    sep = [acum[i]+1 : acum[i+1] for i in 1:length(acum)-1]
-    minimizers_ = [res.minimizer[s] for s in sep]
-
-    
-end
-
-function plot_E_1D(phi, minimizers_, model_name="")
-    anim = @animate for t ∈ ts
-        @info "Animating frame t..."
-        u_predict_E = reshape([phi[2]([t,x], minimizers_[2])[1] for x in xs], length(xs))
-        p1 = plot(xs, u_predict_E, label="", title="E")
-        plot(p1)
-    end
-    gif(anim,model_name*"E.gif", fps=10)
-end
-
-function plot_f_1D(phi, minimizers_, model_name="")
-    anim = @animate for t ∈ ts
-        @info "Animating frame t..."
-        u_predict_f = reshape([phi[1]([t,x,v], minimizers_[1])[1] for x in xs for v in vs], length(xs), length(vs))
-        p1 = plot(xs, vs, u_predict_f, st=:surface, label="", title="f")
-        plot(p1)
-    end
-    gif(anim,model_name*"f.gif", fps=10)
-end
+# discretization.phi gives the internal representation of u(x, y). We can use it to visualize a solution via
