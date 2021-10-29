@@ -127,9 +127,92 @@ phi[2](0.3, minimizers_[2])
 
 u_predict_test = [reshape([first(phi[2]([t,x,y,z],minimizers_[2])) for x in xs  for y in ys for z in zs], (length(xs),length(ys), length(zs)))  for t in ts]
 anim = @animate for i=1:length(ts)
-    p1 = plot(xs, ys, u_real[i], st=:surface, title = "real");
-    p2 = plot(xs, ys, u_predict[i], st=:surface,title = "predict, t = $(ts[i])");
-    plot(p1,p2)
+    p1 = plot(xs, ys, u_predict_test[i], st=:surface, title = "real");
+    plot(p1)
   end
 
 # discretization.phi gives the internal representation of u(x, y). We can use it to visualize a solution via
+using NeuralPDE, Flux, ModelingToolkit, GalacticOptim, Optim, DiffEqFlux
+import ModelingToolkit: Interval, infimum, supremum
+
+@parameters t, x, y, z
+@variables u(..)
+Dxx = Differential(x)^2
+Dyy = Differential(y)^2
+Dzz = Differential(z)^2
+Dtt = Differential(t)^2
+Dt = Differential(t)
+
+#2D PDE
+C=1
+eq  = Dtt(u(t,x,y,z)) ~ C^2*(Dxx(u(t,x,y,z))+Dyy(u(t,x,y,z))+Dzz(u(t,x,y,z)))
+
+# Initial and boundary conditions
+bcs = [u(t,0, y, z) ~ 0.,# for all t > 0
+       u(t,1, y, z) ~ 0.,# for all t > 0
+       u(t,x, 0, z) ~ 0.,# for all t > 0
+       u(t,x, 1, z) ~ 0.,# for all t > 0
+       u(t,x, y, 0) ~ 0.,# for all t > 0
+       u(t,x, y, 1) ~ 0.,# for all t > 0
+       u(0,x, y, z) ~ x*(1. - x), #for all 0 < x < 1
+       Dt(u(0,x, y, z)) ~ 0. ] #for all  0 < x < 1]
+
+# Space and time domains
+domains = [t ∈ Interval(0.0,1.0),
+           x ∈ Interval(0.0,1.0),
+           y ∈ Interval(0.0,1.0),
+           z ∈ Interval(0.0,1.0)]
+# Discretization
+dx = 0.1
+
+# Neural network
+chain = FastChain(FastDense(4,16,Flux.σ),FastDense(16,16,Flux.σ),FastDense(16,1))
+initθ = Float64.(DiffEqFlux.initial_params(chain))
+discretization = PhysicsInformedNN(chain, GridTraining(dx); init_params = initθ)
+
+@named pde_system = PDESystem(eq,bcs,domains,[t,x,y,z],[u(t,x,y,z)])
+prob = discretize(pde_system,discretization)
+
+cb = function (p,l)
+    println("Current loss is: $l")
+    return false
+end
+
+# optimizer
+opt = BFGS()
+res = GalacticOptim.solve(prob,opt; cb = cb, maxiters=500)
+phi = discretization.phi
+sol.u([0,0,0,0])
+sol.w([0,1,2,3])
+sol.u(domains)
+
+### More elegant way to retrieve PINN
+ts, xs, ys, zs = [infimum(d.domain):0.1:supremum(d.domain) for d in domains]
+u_predict = [collect(phi([t,x,y,z], res.minimizer)[1] for x in xs, y in xs, z in zs) for t in ts]
+
+
+# I can plot it like so
+anim = @animate for t ∈ eachindex(ts)
+    scatter(u_predict[t])
+end
+gif(anim, "wave3d.gif", fps=10)
+
+# I can plot y against x, y
+anim = @animate for t ∈ eachindex(xs)
+    plot(xs,ys,u_predict[t][1,:,1])
+end
+gif(anim, "wave3d.gif", fps=10) 
+
+using Makie
+
+positions = Node(u_predict[1])
+scena = volume(xs, ys, zs, positions, colormap = :plasma, colorrange = (minimum(vol), maximum(vol)),figure = (; resolution = (800,800)),  
+                axis = (; type=Axis3, perspectiveness = 0.5,  azimuth = 7.19, elevation = 0.57,  
+                aspect = (1,1,1)))
+
+fps = 60
+record(scena, "output.mp4", eachindex(ts)) do t
+    positions[] = u_predict[t]
+    sleep(1/fps)
+end
+
