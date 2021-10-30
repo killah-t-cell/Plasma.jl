@@ -94,7 +94,7 @@ end
 
 # Solve
 opt = Optim.BFGS()
-res = GalacticOptim.solve(prob, opt, cb = cb, maxiters=200)
+res = GalacticOptim.solve(prob, opt, cb = cb, maxiters=2)
 phi = discretization.phi
 
 ts, xs, ys, zs, vxs, vys, vzs = [infimum(d.domain):0.1:supremum(d.domain) for d in domains]
@@ -103,9 +103,7 @@ sep = [acum[i]+1 : acum[i+1] for i in 1:length(acum)-1]
 minimizers_ = [res.minimizer[s] for s in sep]
 
 ###### Possible solution
-u_predict = collect(Array(phi[1]([t,x,y,z,vx,vy,vz], minimizers_[1]))[1] for t in ts, x in xs, y in ys, z in zs, vx in vxs, vy in vys, vz in vzs)
-
-u_predict_x
+u_predict = [collect(Array(phi[1]([t,x,y,z,vx,vy,vz], minimizers_[1]))[1] for x in xs, y in ys, z in zs, vx in vxs, vy in vys, vz in vzs) for t in ts]
 
 u_predict_x = u_predict[:,:,:,:,1,1,1]
 u_predict_v = u_predict[:,1,1,1,:,:,:]
