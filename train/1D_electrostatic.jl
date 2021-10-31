@@ -8,7 +8,7 @@ import ModelingToolkit: Interval, infimum, supremum
 using Plots
 using CUDA
 
-GPU = true
+GPU = false
 
 @parameters t x v
 @variables f(..) E(..) 
@@ -45,7 +45,6 @@ end
 bcs = [f(0,x,v) ~ set_initial_geometry(v) * 1/(v_th * sqrt(2π)) * exp(-v^2/(2*v_th^2)),
        E(0,x) ~ set_initial_geometry(v) * e*n_0/ε_0 * (Iv(f(0,x,v)) - 1) * x,
        E(t,0) ~ 0]
-
 
 # Neural Network
 CUDA.allowscalar(false)
