@@ -214,3 +214,52 @@ record(scena, "output.mp4", eachindex(ts)) do t
     sleep(1/fps)
 end
 
+
+
+## CORRECT WAY TO DO 7D PLOTTING!!!!
+
+using GLMakie
+GLMakie.activate!()
+
+ts = 1:10
+data = [rand(100,100,100,100,100,100) for t in ts]
+
+i = Observable(1)
+
+f = Figure()
+
+data_1 = @lift(data[$i][:, :, :, 1, 1, 1])
+data_2 = @lift(data[$i][1, 1, 1, :, :, :])
+
+GLMakie.volume(f[1, 1], data_1, axis = (;type = Axis3))
+GLMakie.volume(f[1, 2], data_2, axis = (;type = Axis3))
+
+ls = labelslider!(f, "t", ts)
+f[2, 1:2] = ls.layout
+connect!(i, ls.slider.value)
+
+f
+
+# real data
+
+using GLMakie
+GLMakie.activate!()
+
+ts = 1:10
+i = Observable(1)
+
+u_predict
+
+f = Figure()
+
+data_1 = @lift(u_predict[$i][:, :, :, 1, 1, 1])
+data_2 = @lift(u_predict[$i][1, 1, 1, :, :, :])
+
+GLMakie.volume(f[1, 1], data_1, axis = (;type = Axis3))
+GLMakie.volume(f[1, 2], data_2, axis = (;type = Axis3))
+
+ls = labelslider!(f, "t", ts)
+f[2, 1:2] = ls.layout
+connect!(i, ls.slider.value)
+
+f
