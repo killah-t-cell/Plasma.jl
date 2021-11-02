@@ -75,6 +75,7 @@ function solve_collisionless_plasma(params, lb, ub; time_lb=lb, time_ub=ub, GPU=
 
     @parameters t x y z vx vy vz
     @variables fe(..) fi(..) Ex(..) Ey(..) Ez(..) Bx(..) By(..) Bz(..)
+    @variables Ivfe(..) Ivfi(..) Ivvxfe(..) Ivvxfi(..) Ivvyfe(..) Ivvyfi(..) Ivvzfe(..) Ivvzfi(..)
     Dx = Differential(x)
     Dy = Differential(y)
     Dz = Differential(z)
@@ -122,7 +123,7 @@ function solve_collisionless_plasma(params, lb, ub; time_lb=lb, time_ub=ub, GPU=
     Div_B = Dx(B[1]) + Dy(B[2]) + Dz(B[3])
     Div_E = Dx(E[1]) + Dy(E[2]) + Dz(E[3])
     
-    ρ = q_e * Iv(fe(t,x,y,z,vx,vy,vz)) + q_i * Iv(fi(t,x,y,z,vx,vy,vz))
+    ρ = q_e * Ivfe(t,x,y,z,vx,vy,vz) + q_i * Ivfi(t,x,y,z,vx,vy,vz)
     J = [q_e * Iv(vx * fe(t,x,y,z,vx,vy,vz)) + q_i * Iv(vx * fi(t,x,y,z,vx,vy,vz)), q_e * Iv(vy * fe(t,x,y,z,vx,vy,vz)) + q_i * Iv(vy * fi(t,x,y,z,vx,vy,vz)), q_e * Iv(vz * fe(t,x,y,z,vx,vy,vz)) + q_i * Iv(vz * fi(t,x,y,z,vx,vy,vz))]
     
     eqs = [Dt(fe(t,x,y,z,vx,vy,vz)) ~ - Divx_v_e - Divv_F_e,
@@ -137,11 +138,22 @@ function solve_collisionless_plasma(params, lb, ub; time_lb=lb, time_ub=ub, GPU=
            Div_B ~ 0]
     
     # Boundaries and initial conditions
-    bcs = [fe(0,x,y,z,vx,vy,vz) ~ params.IC_e(vx,vy,vz,T,m_e, v_drift) * params.geometry(x, y, z),
+    bcs_ = [fe(0,x,y,z,vx,vy,vz) ~ params.IC_e(vx,vy,vz,T,m_e, v_drift) * params.geometry(x, y, z),
             fi(0,x,y,z,vx,vy,vz) ~ params.IC_i(vx,vy,vz,T,m_i, v_drift) * params.geometry(x, y, z), 
             Div_B ~ 0,
-            Div_E ~ (q_e * Iv(fe(0,x,y,z,vx,vy,vz)) + q_i * Iv(fi(0,x,y,z,vx,vy,vz)))/ε_0 * params.geometry(x, y, z)] 
+            Div_E ~ (q_e * Ivfe(0,x,y,z,vx,vy,vz) + q_i * Ivfi(0,x,y,z,vx,vy,vz))/ε_0 * params.geometry(x, y, z)] 
         
+    ints_ = [Iv(fe(t,x,y,z,vx,vy,vz)) ~ Ivfe(t,x,y,z,vx,vy,vz),
+             Iv(fi(t,x,y,z,vx,vy,vz)) ~ Ivfi(t,x,y,z,vx,vy,vz),
+             Iv(vx * fe(t,x,y,z,vx,vy,vz)) ~ Ivvxfe(t,x,y,z,vx,vy,vz),
+             Iv(vx * fi(t,x,y,z,vx,vy,vz)) ~ Ivvxfi(t,x,y,z,vx,vy,vz),
+             Iv(vy * fe(t,x,y,z,vx,vy,vz)) ~ Ivvyfe(t,x,y,z,vx,vy,vz),
+             Iv(vy * fi(t,x,y,z,vx,vy,vz)) ~ Ivvyfi(t,x,y,z,vx,vy,vz),
+             Iv(vz * fe(t,x,y,z,vx,vy,vz)) ~ Ivvzfe(t,x,y,z,vx,vy,vz),
+             Iv(vz * fi(t,x,y,z,vx,vy,vz)) ~ Ivvzfi(t,x,y,z,vx,vy,vz)]
+
+    bcs = [bcs_;ints_]
+
     # Neural Network
     CUDA.allowscalar(false)
     chain = [[FastChain(FastDense(7, 16, Flux.σ), FastDense(16,16,Flux.σ), FastDense(16, 1)) for _ in 1:2];
@@ -154,7 +166,9 @@ function solve_collisionless_plasma(params, lb, ub; time_lb=lb, time_ub=ub, GPU=
     prob = SciMLBase.discretize(pde_system, discretization)
 
     pde_inner_loss_functions = prob.f.f.loss_function.pde_loss_function.pde_loss_functions.contents
-    bcs_inner_loss_functions = prob.f.f.loss_function.bcs_loss_function.bc_loss_functions.contents
+    inner_loss_functions = prob.f.f.loss_function.bcs_loss_function.bc_loss_functions.contents
+    bcs_inner_loss_functions = inner_loss_functions[1:4]
+    aprox_integral_loss_functions = inner_loss_functions[5:end]
 
     cb = function (p,l)
         println("Current loss is: $l")

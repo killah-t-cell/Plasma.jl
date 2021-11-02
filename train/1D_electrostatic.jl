@@ -11,7 +11,7 @@ using CUDA
 GPU = false
 
 @parameters t x v
-@variables f(..) E(..) 
+@variables f(..) Ivf(..) E(..)
 Dx = Differential(x)
 Dt = Differential(t)
 Dv = Differential(v)
@@ -34,7 +34,7 @@ Iv = Integral(v in DomainSets.ClosedInterval(-Inf, Inf))
 
 # Equations
 eqs = [Dt(f(t,x,v)) ~ - v * Dx(f(t,x,v)) - e/m_e * E(t,x) * Dv(f(t,x,v))
-       Dx(E(t,x)) ~ e*n_0/ε_0 * (Iv(f(t,x,v)) - 1)]
+       Dx(E(t,x)) ~ e*n_0/ε_0 * (Ivf(t,x,v) - 1)]
 
 # Boundaries and initial conditions
 function set_initial_geometry(v)
@@ -42,30 +42,38 @@ function set_initial_geometry(v)
 end
 @register set_initial_geometry(v)
 
-bcs = [f(0,x,v) ~ set_initial_geometry(v) * 1/(v_th * sqrt(2π)) * exp(-v^2/(2*v_th^2)),
-       E(0,x) ~ set_initial_geometry(v) * e*n_0/ε_0 * (Iv(f(0,x,v)) - 1) * x,
+bcs_ = [f(0,x,v) ~ set_initial_geometry(v) * 1/(v_th * sqrt(2π)) * exp(-v^2/(2*v_th^2)),
+       E(0,x) ~ set_initial_geometry(v) * e*n_0/ε_0 * (Ivf(t,x,v) - 1) * x,
        E(t,0) ~ 0]
+
+ints_ = [Iv(f(t,x,v)) ~ Ivf(t,x,v)]
+
+bcs = [bcs_;ints_]
 
 # Neural Network
 CUDA.allowscalar(false)
 chain = [FastChain(FastDense(3, 16, Flux.σ), FastDense(16,16,Flux.σ), FastDense(16, 1)),
+         FastChain(FastDense(3, 16, Flux.σ), FastDense(16,16,Flux.σ), FastDense(16, 1)),
          FastChain(FastDense(2, 16, Flux.σ), FastDense(16,16,Flux.σ), FastDense(16, 1))]
 
 initθ = GPU ? map(c -> CuArray(Float64.(c)), DiffEqFlux.initial_params.(chain)) : map(c -> Float64.(c), DiffEqFlux.initial_params.(chain)) 
 
 
 discretization = NeuralPDE.PhysicsInformedNN(chain, QuadratureTraining(), init_params= initθ)
-@named pde_system = PDESystem(eqs, bcs, domains, [t,x,v], [f(t,x,v), E(t,x)])
+@named pde_system = PDESystem(eqs, bcs, domains, [t,x,v], [f(t,x,v), Ivf(t,x,v), E(t,x)])
 prob = SciMLBase.symbolic_discretize(pde_system, discretization)
 prob = SciMLBase.discretize(pde_system, discretization)
 
 pde_inner_loss_functions = prob.f.f.loss_function.pde_loss_function.pde_loss_functions.contents
-bcs_inner_loss_functions = prob.f.f.loss_function.bcs_loss_function.bc_loss_functions.contents
+inner_loss_functions = prob.f.f.loss_function.bcs_loss_function.bc_loss_functions.contents
+bcs_inner_loss_functions = inner_loss_functions[1:3]
+aprox_integral_loss_functions = inner_loss_functions[4:end]
 
 cb = function (p,l)
-    println("Current loss is: $l")
+    println("loss: ", l )
     println("pde_losses: ", map(l_ -> l_(p), pde_inner_loss_functions))
     println("bcs_losses: ", map(l_ -> l_(p), bcs_inner_loss_functions))
+    println("int_losses: ", map(l_ -> l_(p), aprox_integral_loss_functions))
     return false
 end
 

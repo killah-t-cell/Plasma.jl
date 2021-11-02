@@ -40,7 +40,7 @@ GPU = false
     m_i = 33435837724e-27 # Deuterium mass
 
     # Space
-    domains = [t ∈ Interval(time_lb, time_ub),
+    domains = [t ∈ Interval(lb, ub),
             x ∈ Interval(lb, ub),
             y ∈ Interval(lb, ub), 
             z ∈ Interval(lb, ub), 
@@ -50,6 +50,8 @@ GPU = false
 
     # Integrals
     Iv = Integral((vx,vy,vz) in DomainSets.ProductDomain(ClosedInterval(-Inf ,Inf), ClosedInterval(-Inf ,Inf), ClosedInterval(-Inf ,Inf)))
+    # v = [vx,vy,vz]
+    # J = q_e * Iv.(v * fe(t,x,y,z,vx,vy,vz))
 
     # Equations
     curl(vec) = [Dy(vec[3]) - Dz(vec[2]), Dz(vec[1]) - Dx(vec[3]), Dx(vec[2]) - Dy(vec[1])]
