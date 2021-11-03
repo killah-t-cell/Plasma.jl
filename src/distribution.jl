@@ -7,7 +7,7 @@ abstract type AbstractDistribution end
     m::Ty # Mass in Kg
     P::Ty = nothing # probability distribution : 0 ≤ P ≤ 1
 
-    function Maxwellian(v, T, m; P=nothing, v_drift=zeros(length(v)))
+    function Maxwellian(v, T, m; v_drift=zeros(length(v)))
         if !(v isa Array)
             v = [v]    
         end

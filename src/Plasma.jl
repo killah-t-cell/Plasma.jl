@@ -14,6 +14,8 @@ include("distribution.jl")
 include("analyze.jl")
 
 abstract type AbstractPlasma end
+
+# TODO Species could be more elegant. It feels a bit hacky
 struct Species{ T <: Number }
     q::T # charge in C
     m::T # mass in Kg
