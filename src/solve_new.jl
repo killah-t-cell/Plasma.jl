@@ -1,11 +1,9 @@
-# Slowly move useful things here, then rename
-
-# Inspiration: https://github.com/SciML/ModelingToolkitStandardLibrary.jl/blob/24e2625ec9b9b045a0b5683e6da4dfeda4ff6fc7/src/Electrical/Analog/ideal_components.jl#L7
-
-# receive Plasma object
-
-
-function solve(plasma::CollisionlessPlasma; lb, ub, time_lb=lb, time_ub=ub, GPU=true, inner_layers=16)
+"""
+Solve dispatch for collisionless plasmas
+"""
+function solve(plasma::CollisionlessPlasma; 
+               lb=0.0, ub=1.0, time_lb=lb, time_ub=ub, 
+               GPU=true, inner_layers=16)
     if lb > ub
         error("lower bound must be larger than upper bound")
     end
@@ -13,7 +11,7 @@ function solve(plasma::CollisionlessPlasma; lb, ub, time_lb=lb, time_ub=ub, GPU=
     # constants
     dim = 3
     species = plasma.species
-    geometry = plasma.geometry
+    geometry = plasma.geometry.f # this might change with a geometry refactor
     consts = Constants()
     μ_0, ϵ_0 = consts.μ_0, consts.ϵ_0
 
@@ -22,14 +20,14 @@ function solve(plasma::CollisionlessPlasma; lb, ub, time_lb=lb, time_ub=ub, GPU=
     Es = Symbolics.variables(:E, 1:dim; T=SymbolicUtils.FnType{Tuple,Real})
     Bs = Symbolics.variables(:B, 1:dim; T=SymbolicUtils.FnType{Tuple,Real})
 
-    # integrals
-    Ivs = Symbolics.variables(:Iv, eachindex(fs), 1:dim ; T=SymbolicUtils.FnType{Tuple,Real})
-    Is = Symbolics.variables(:I, eachindex(fs); T=SymbolicUtils.FnType{Tuple,Real})
-    _I = Integral(tuple(vs...) in DomainSets.ProductDomain(ClosedInterval(-Inf ,Inf), ClosedInterval(-Inf ,Inf), ClosedInterval(-Inf ,Inf)))
-
     # parameters
     @parameters t
     xs,vs = Symbolics.variables(:x, 1:dim), Symbolics.variables(:v, 1:dim)
+
+    # integrals
+    Ivs = Symbolics.variables(:Iv, eachindex(fs), 1:dim ; T=SymbolicUtils.FnType{Tuple,Real})
+    Is = Symbolics.variables(:I, eachindex(fs); T=SymbolicUtils.FnType{Tuple,Real})
+    _I = Integral(tuple(vs...) in DomainSets.ProductDomain(ClosedInterval(-Inf ,Inf), ClosedInterval(-Inf ,Inf), ClosedInterval(-Inf ,Inf)))    
 
     # differentials
     Dxs = Differential.(xs)
@@ -78,9 +76,9 @@ function solve(plasma::CollisionlessPlasma; lb, ub, time_lb=lb, time_ub=ub, GPU=
     eqs = [vlasov_eqs; curl_E_eqs; curl_B_eqs; div_E_eq; div_B_eq]
 
     # boundary and initial conditions
-    vlasov_ics = [fs[i](0,xs...,vs...) ~ Ps[i] * geometry(xs...) for i in eachindex(fs)]
+    vlasov_ics = [fs[i](0,xs...,vs...) ~ Ps[i] * geometry(xs) for i in eachindex(fs)]
     div_B_ic = div_B ~ 0
-    div_E_ic = div_E ~ sum([qs[i] * Is[i](0,xs...,vs...) for i in eachindex(qs)])/ϵ_0 * geometry(xs...)
+    div_E_ic = div_E ~ sum([qs[i] * Is[i](0,xs...,vs...) for i in eachindex(qs)])/ϵ_0 * geometry(xs)
     
     bcs_ = [vlasov_ics; div_B_ic; div_E_ic]
 
@@ -95,7 +93,8 @@ function solve(plasma::CollisionlessPlasma; lb, ub, time_lb=lb, time_ub=ub, GPU=
     vars = [_fs...; _Is...; _Ivs...; _Es...; _Bs...]
     @named pde_system = PDESystem(eqs, bcs, domains, [t,xs...,vs...], vars)
 
-    # solve
+    # set up problem
+    il = inner_layers
     ps_chains = [FastChain(FastDense(length(domains), il, Flux.σ), FastDense(il,il,Flux.σ), FastDense(il, 1)) for _ in 1:length([_fs; _Is; vcat(_Ivs...)])]
     xs_chains = [FastChain(FastDense(length([t, xs...]), il, Flux.σ), FastDense(il,il,Flux.σ), FastDense(il, 1)) for _ in 1:length([_Es; _Bs])]
     chain = [ps_chains;xs_chains]
@@ -103,7 +102,7 @@ function solve(plasma::CollisionlessPlasma; lb, ub, time_lb=lb, time_ub=ub, GPU=
     discretization = NeuralPDE.PhysicsInformedNN(chain, QuadratureTraining(), init_params=initθ)
     prob = SciMLBase.discretize(pde_system, discretization)
     
-    # Solve
+    # solve
     opt = Optim.BFGS()
     res = GalacticOptim.solve(prob, opt, cb = print_loss(prob), maxiters=200)
     prob = remake(prob, u0=res.minimizer)
@@ -114,11 +113,16 @@ function solve(plasma::CollisionlessPlasma; lb, ub, time_lb=lb, time_ub=ub, GPU=
     return phi, res, initθ
 end
 
-
+"""
+Solve dispatch for electrostatic plasmas
+"""
 function solve(plasma::ElectrostaticPlasma; lb, ub, dim=3, time_lb=lb, time_ub=ub, GPU=true)
     
 end
 
+"""
+Get the curl of a vector f w.r.t Ds
+"""
 function curl(vec, Ds)
     [Ds[2](vec[3]) - Ds[3](vec[2]), Ds[3](vec[1]) - Ds[1](vec[3]), Ds[1](vec[2]) - Ds[2](vec[1])]
 end
@@ -134,18 +138,19 @@ function divergence(Ds, f, v=ones(length(Ds)))
     end
 end
 
+"""
+Print the loss of the loss function
+"""
 function print_loss(prob)
     pde_inner_loss_functions = prob.f.f.loss_function.pde_loss_function.pde_loss_functions.contents
     inner_loss_functions = prob.f.f.loss_function.bcs_loss_function.bc_loss_functions.contents
-    bcs_inner_loss_functions = inner_loss_functions[1:4]
-    aprox_integral_loss_functions = inner_loss_functions[5:end]
 
     cb = function (p,l)
-    println("Current loss is: $l")
-    println("pde_losses: ", map(l_ -> l_(p), pde_inner_loss_functions))
-    println("bcs_losses: ", map(l_ -> l_(p), bcs_inner_loss_functions))
-    return false
+        println("Current loss is: $l")
+        println("pde_losses: ", map(l_ -> l_(p), pde_inner_loss_functions))
+        println("bcs_losses: ", map(l_ -> l_(p), inner_loss_functions))
+        return false
     end
+    
+    return cb
 end
-
-

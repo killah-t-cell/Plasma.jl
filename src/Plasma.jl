@@ -5,6 +5,7 @@ using ModelingToolkit
 using GalacticOptim
 using DiffEqFlux
 using NeuralPDE
+using LinearAlgebra
 using Parameters
 import ModelingToolkit: Interval, infimum, supremum
 
