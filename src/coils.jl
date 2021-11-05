@@ -1,1 +1,1 @@
-abstract type AbstractCoil end
+# TODO

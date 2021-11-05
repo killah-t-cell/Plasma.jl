@@ -1,5 +1,3 @@
-abstract type AbstractDistribution end
-
 @with_kw struct Maxwellian{Ty, V} <: AbstractDistribution
     v::V
     v_drift::V = zeros(length(v))

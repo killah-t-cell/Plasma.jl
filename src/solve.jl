@@ -1,367 +1,252 @@
-using ModelingToolkit
-using Flux
-using NeuralPDE
-using GalacticOptim
-using DiffEqFlux
-using DomainSets
-import ModelingToolkit: Interval, infimum, supremum
-using Parameters
-using Plots
-using LinearAlgebra
-using CUDA
-using BSON: @save
-using BSON: @load
-
-# TODO support more parameters?
-# TODO support multi-species plasma
-@with_kw struct PlasmaParameters{T}
-    temperature::Float64 # Kelvin
-    geometry
-    IC_e
-    IC_i = IC_e
-    v_drift::Vector{T} = zeros(3)
-    m_i::Float64 = 3.3435837724e-27
-    Z_i::Int16 = 1 # valid for hydrogen or deuterium
-    q_i::Float64 = Z * 1.602176634e-19
-end
-
-#### Boundaries ####
-function set_boundaries(type)
-    # reflective
-    # damped
-    # periodic
-end
-
-#### Distribution functions ####
 """
-Maxwellian velocity distribution in 3 dimensions
+Solve dispatch for collisionless plasmas
 """
-function maxwellian_3D(vx,vy,vz,T,m, v_drift)
-    Kb = 1.3806503e-23
-    v_th = sqrt(2*Kb*T/m)
-    v = sqrt(vx^2 + vy^2 + vz^2)
-    v_drift = sqrt(v_drift[1]^2 + v_drift[2]^2 + v_drift[3]^2)
-    return (π*v_th^2)^(-3/2) * exp(-(v - v_drift)^2/v_th^2)
-end
-
-"""
-Maxwellian velocity distribution in 1 dimension
-"""
-function maxwellian_1D(v,T,v_th, v_drift)
-    Kb = 1.3806503e-23
-    v_th = sqrt(2*Kb*T/m)
-    return (π*v_th^2)^(-3/2) * exp(-(v - v_drift)^2/v_th^2)
-end
-
-#### Models ####
-"""
-Solves a collisionless plasma with 2 species in 6 dimensions
-
-Collisionless kinetic plasmas are accurate models when the plasma is at high temperature, is of low density, and that collisions are unimportant.
-
-High temperature means -> 
-
-For more information: https://doi.org/10.1137/1.9781611971477
-"""
-# TODO maybe separate system definition (parameters, variables, Differentials, domains, eqs, bcs, etc from solver?)
-function solve_collisionless_plasma(params, lb, ub; time_lb=lb, time_ub=ub, GPU=true)
+function solve(plasma::CollisionlessPlasma; 
+               lb=0.0, ub=1.0, time_lb=lb, time_ub=ub, 
+               GPU=true, inner_layers=16)
     if lb > ub
         error("lower bound must be larger than upper bound")
     end
 
-    #if params.IC_e(args...) < 0 || params.IC_i(args...) < 0
-    #    error("distribution function must be greater than 0")
-    #end
+    # constants
+    dim = 3
+    species = plasma.species
+    geometry = plasma.geometry.f # this might change with a geometry refactor
+    consts = Constants()
+    μ_0, ϵ_0 = consts.μ_0, consts.ϵ_0
 
-    @parameters t x y z vx vy vz
-    @variables fe(..) fi(..) Ex(..) Ey(..) Ez(..) Bx(..) By(..) Bz(..)
-    @variables Ivfe(..) Ivfi(..) Ivvxfe(..) Ivvxfi(..) Ivvyfe(..) Ivvyfi(..) Ivvzfe(..) Ivvzfi(..)
-    Dx = Differential(x)
-    Dy = Differential(y)
-    Dz = Differential(z)
-    Dvx = Differential(vx)
-    Dvy = Differential(vy)
-    Dvz = Differential(vz)
+    # variables
+    fs = Symbolics.variables(:f, eachindex(species); T=SymbolicUtils.FnType{Tuple,Real})
+    Es = Symbolics.variables(:E, 1:dim; T=SymbolicUtils.FnType{Tuple,Real})
+    Bs = Symbolics.variables(:B, 1:dim; T=SymbolicUtils.FnType{Tuple,Real})
+
+    # parameters
+    @parameters t
+    xs,vs = Symbolics.variables(:x, 1:dim), Symbolics.variables(:v, 1:dim)
+
+    # integrals
+    Ivs = Symbolics.variables(:Iv, eachindex(fs), 1:dim ; T=SymbolicUtils.FnType{Tuple,Real})
+    Is = Symbolics.variables(:I, eachindex(fs); T=SymbolicUtils.FnType{Tuple,Real})
+    _I = Integral(tuple(vs...) in DomainSets.ProductDomain(ClosedInterval(-Inf ,Inf), ClosedInterval(-Inf ,Inf), ClosedInterval(-Inf ,Inf)))    
+
+    # differentials
+    Dxs = Differential.(xs)
+    Dvs = Differential.(vs)
     Dt = Differential(t)
 
-    # Constants # TODO turn into struct and pass it here
-    μ_0 = 1.25663706212e-6 # N A⁻²
-    ε_0 = 8.8541878128e-12 # F ms⁻¹
-    q_e   = 1.602176634e-19 # Coulombs
-    m_e = 9.10938188e-31 # Kg
-    q_i   = params.q_i # Coulombs
-    m_i = params.m_i # Deuterium mass
-    v_drift = params.v_drift
-    T = params.temperature
+    # get qs, ms, Ps from species
+    qs, ms, Ps = [], [], []
+    for s in species
+        push!(qs,s.q)
+        push!(ms,s.m)
+        push!(Ps,s.P)
+    end
 
-    # Space
-    domains = [t ∈ Interval(time_lb, time_ub),
-            x ∈ Interval(lb, ub),
-            y ∈ Interval(lb, ub), 
-            z ∈ Interval(lb, ub), 
-            vx ∈ Interval(lb, ub),
-            vy ∈ Interval(lb, ub),
-            vz ∈ Interval(lb, ub)]
-    
-    # Integrals
-    Iv = Integral((vx,vy,vz) in DomainSets.ProductDomain(ClosedInterval(-Inf ,Inf), ClosedInterval(-Inf ,Inf), ClosedInterval(-Inf ,Inf)))
-    
-    # Equations
-    curl(vec) = [Dy(vec[3]) - Dz(vec[2]), Dz(vec[1]) - Dx(vec[3]), Dx(vec[2]) - Dy(vec[1])]
-    E = [Ex(t,x,y,z), Ey(t,x,y,z), Ez(t,x,y,z)]
-    B = [Bx(t,x,y,z), By(t,x,y,z), Bz(t,x,y,z)]
-    
-    v = [vx, vy, vz]
-    Divx_v_e = vx * Dx(fe(t,x,y,z,vx,vy,vz)) + vy * Dy(fe(t,x,y,z,vx,vy,vz)) + vz * Dz(fe(t,x,y,z,vx,vy,vz))
-    Divx_v_i = vx * Dx(fi(t,x,y,z,vx,vy,vz)) + vy * Dy(fi(t,x,y,z,vx,vy,vz)) + vz * Dz(fi(t,x,y,z,vx,vy,vz))
-    F_e = q_e/m_e * (E + cross(v, B))
-    F_i = q_i/m_i * (E + cross(v, B))
-    DfDv_e = [Dvx(fe(t,x,y,z,vx,vy,vz)), Dvy(fe(t,x,y,z,vx,vy,vz)), Dvz(fe(t,x,y,z,vx,vy,vz))]
-    DfDv_i = [Dvx(fi(t,x,y,z,vx,vy,vz)), Dvy(fi(t,x,y,z,vx,vy,vz)), Dvz(fi(t,x,y,z,vx,vy,vz))]
-    Divv_F_e = dot(F_e, DfDv_e)
-    Divv_F_i = dot(F_i, DfDv_i)
-    Div_B = Dx(B[1]) + Dy(B[2]) + Dz(B[3])
-    Div_E = Dx(E[1]) + Dy(E[2]) + Dz(E[3])
-    
-    ρ = q_e * Ivfe(t,x,y,z,vx,vy,vz) + q_i * Ivfi(t,x,y,z,vx,vy,vz)
-    J = [q_e * Ivvxfe(t,x,y,z,vx,vy,vz) + q_i * Ivvxfi(t,x,y,z,vx,vy,vz), q_e * Ivvyfe(t,x,y,z,vx,vy,vz) + q_i * Ivvyfi(t,x,y,z,vx,vy,vz), q_e * Ivvzfe(t,x,y,z,vx,vy,vz) + q_i * Ivvzfi(t,x,y,z,vx,vy,vz)]
-    
-    eqs = [Dt(fe(t,x,y,z,vx,vy,vz)) ~ - Divx_v_e - Divv_F_e,
-           Dt(fi(t,x,y,z,vx,vy,vz)) ~ - Divx_v_i - Divv_F_i,
-           curl(E)[1] ~ Dt(Bx(t,x,y,z)),
-           curl(E)[2] ~ Dt(By(t,x,y,z)),
-           curl(E)[3] ~ Dt(Bz(t,x,y,z)),
-           ε_0*μ_0 * Dt(E[1]) - curl(B)[1] ~ - μ_0*J[1],
-           ε_0*μ_0 * Dt(E[2]) - curl(B)[2] ~ - μ_0*J[2],
-           ε_0*μ_0 * Dt(E[3]) - curl(B)[3] ~ - μ_0*J[3],
-           Div_E ~ ρ/ε_0,
-           Div_B ~ 0]
-    
-    # Boundaries and initial conditions
-    bcs_ = [fe(0,x,y,z,vx,vy,vz) ~ params.IC_e(vx,vy,vz,T,m_e, v_drift) * params.geometry(x, y, z),
-            fi(0,x,y,z,vx,vy,vz) ~ params.IC_i(vx,vy,vz,T,m_i, v_drift) * params.geometry(x, y, z), 
-            Div_B ~ 0,
-            Div_E ~ (q_e * Ivfe(0,x,y,z,vx,vy,vz) + q_i * Ivfi(0,x,y,z,vx,vy,vz))/ε_0 * params.geometry(x, y, z)] 
-        
-    ints_ = [Iv(fe(t,x,y,z,vx,vy,vz)) ~ Ivfe(t,x,y,z,vx,vy,vz),
-             Iv(fi(t,x,y,z,vx,vy,vz)) ~ Ivfi(t,x,y,z,vx,vy,vz),
-             Iv(vx * fe(t,x,y,z,vx,vy,vz)) ~ Ivvxfe(t,x,y,z,vx,vy,vz),
-             Iv(vx * fi(t,x,y,z,vx,vy,vz)) ~ Ivvxfi(t,x,y,z,vx,vy,vz),
-             Iv(vy * fe(t,x,y,z,vx,vy,vz)) ~ Ivvyfe(t,x,y,z,vx,vy,vz),
-             Iv(vy * fi(t,x,y,z,vx,vy,vz)) ~ Ivvyfi(t,x,y,z,vx,vy,vz),
-             Iv(vz * fe(t,x,y,z,vx,vy,vz)) ~ Ivvzfe(t,x,y,z,vx,vy,vz),
-             Iv(vz * fi(t,x,y,z,vx,vy,vz)) ~ Ivvzfi(t,x,y,z,vx,vy,vz)]
+    # domains
+    xs_int = xs .∈ Interval(lb, ub)
+    vs_int = vs .∈ Interval(lb, ub)
+    t_int = t ∈ Interval(time_lb, time_ub)
 
+    domains = [t_int;xs_int;vs_int]
+
+    # helpers
+    _Es = [E(t,xs...) for E in Es]
+    _Bs = [B(t,xs...) for B in Bs]
+    _fs = [f(t,xs...,vs...) for f in fs]
+    _Is = [I(t,xs...,vs...) for I in Is]
+    _Ivs = [Iv(t,xs...,vs...) for Iv in Ivs]
+
+    # divergences
+    div_vs = [divergence(Dxs, _f, vs) for _f in _fs]
+    div_B = divergence(Dxs, _Bs)
+    div_E = divergence(Dxs, _Es)
+    Fs = [qs[i]/ms[i] * (_Es + cross(vs,_Bs)) for i in eachindex(qs)]
+    divv_Fs = [divergence(Dvs, _fs[i], Fs[i]) for i in eachindex(_fs)]
+
+    # charge and current densities
+    ρ = sum([qs[i] * _Is[i] for i in eachindex(qs)])
+    J = [sum(qs[i] * _Ivs[i, j] for i in eachindex(qs)) for j in 1:length(eachcol(_Ivs))] 
+
+    # system of equations
+    vlasov_eqs = Dt.(_fs) .~ .- div_vs .- divv_Fs
+    curl_E_eqs = curl(_Es, Dxs) .~ Dt.(_Bs)
+    curl_B_eqs = ϵ_0*μ_0 * Dt.(_Es) .- curl(_Bs, Dxs) .~ - μ_0.*J
+    div_E_eq = div_E ~ ρ/ϵ_0
+    div_B_eq = div_B ~ 0
+    eqs = [vlasov_eqs; curl_E_eqs; curl_B_eqs; div_E_eq; div_B_eq]
+
+    # boundary and initial conditions
+    vlasov_ics = [fs[i](0,xs...,vs...) ~ Ps[i] * geometry(xs) for i in eachindex(fs)]
+    div_B_ic = div_B ~ 0
+    div_E_ic = div_E ~ sum([qs[i] * Is[i](0,xs...,vs...) for i in eachindex(qs)])/ϵ_0 * geometry(xs)
+    
+    bcs_ = [vlasov_ics; div_B_ic; div_E_ic]
+
+    # neural integral
+    f_ints = _I.(_fs) .~ _Is 
+    vf_ints = [_I(_fs[i]) * vs[j] ~ _Ivs[i, j] for i in 1:length(eachrow(_Ivs)), j in 1:length(eachcol(_Ivs))] 
+
+    ints_ = [f_ints; vcat(vf_ints...)]
+
+    # set up PDE System
     bcs = [bcs_;ints_]
+    vars = [_fs...; _Is...; _Ivs...; _Es...; _Bs...]
+    @named pde_system = PDESystem(eqs, bcs, domains, [t,xs...,vs...], vars)
 
-    # Neural Network
-    vars = [fe(t,x,y,z,vx,vy,vz), fi(t,x,y,z,vx,vy,vz), Ex(t,x,y,z), Ey(t,x,y,z), Ez(t,x,y,z), Bx(t,x,y,z), By(t,x,y,z), Bz(t,x,y,z)]
-    @named pde_system = PDESystem(eqs, bcs, domains, [t,x,y,z,vx,vy,vz], vars)
-
-    CUDA.allowscalar(false)
-    chain = [[FastChain(FastDense(7, 16, Flux.σ), FastDense(16,16,Flux.σ), FastDense(16, 1)) for _ in 1:2];
-            [FastChain(FastDense(4, 16, Flux.σ), FastDense(16,16,Flux.σ), FastDense(16, 1)) for _ in 1:8]]
+    # set up problem
+    il = inner_layers
+    ps_chains = [FastChain(FastDense(length(domains), il, Flux.σ), FastDense(il,il,Flux.σ), FastDense(il, 1)) for _ in 1:length([_fs; _Is; vcat(_Ivs...)])]
+    xs_chains = [FastChain(FastDense(length([t, xs...]), il, Flux.σ), FastDense(il,il,Flux.σ), FastDense(il, 1)) for _ in 1:length([_Es; _Bs])]
+    chain = [ps_chains;xs_chains]
     initθ = GPU ? map(c -> CuArray(Float64.(c)), DiffEqFlux.initial_params.(chain)) : map(c -> Float64.(c), DiffEqFlux.initial_params.(chain)) 
-    
     discretization = NeuralPDE.PhysicsInformedNN(chain, QuadratureTraining(), init_params=initθ)
     prob = SciMLBase.discretize(pde_system, discretization)
+    
+    # solve
+    opt = Optim.BFGS()
+    res = GalacticOptim.solve(prob, opt, cb = print_loss(prob), maxiters=200)
+    prob = remake(prob, u0=res.minimizer)
+    res = GalacticOptim.solve(prob, ADAM(0.01), cb = print_loss(prob), maxiters=10000)
+    prob = remake(prob, u0=res.minimizer)
+    res = GalacticOptim.solve(prob, opt, cb = print_loss(prob), maxiters=200)
+    phi = discretization.phi
+    return phi, res, initθ
+end
 
+"""
+Solve dispatch for electrostatic plasmas
+"""
+function solve(plasma::ElectrostaticPlasma; 
+    lb=0.0, ub=1.0, time_lb=lb, time_ub=ub, 
+    dim=3, GPU=true, inner_layers=16)
+    if lb > ub
+        error("lower bound must be larger than upper bound")
+    end
+
+    # constants
+    species = plasma.species
+    geometry = plasma.geometry.f # this might change with a geometry refactor
+
+    consts = Constants()
+    μ_0, ϵ_0 = consts.μ_0, consts.ϵ_0
+
+    # variables
+    fs = Symbolics.variables(:f, eachindex(species); T=SymbolicUtils.FnType{Tuple,Real})
+    Es = Symbolics.variables(:E, 1:dim; T=SymbolicUtils.FnType{Tuple,Real})
+
+    # parameters
+    @parameters t
+    xs,vs = Symbolics.variables(:x, 1:dim), Symbolics.variables(:v, 1:dim)
+
+    # integrals
+    Is = Symbolics.variables(:I, eachindex(fs); T=SymbolicUtils.FnType{Tuple,Real})
+    _I = Integral(tuple(vs...) in DomainSets.ProductDomain(ClosedInterval(-Inf ,Inf), ClosedInterval(-Inf ,Inf), ClosedInterval(-Inf ,Inf)))    
+
+    # differentials
+    Dxs = Differential.(xs)
+    Dvs = Differential.(vs)
+    Dt = Differential(t)
+
+    # get qs, ms, Ps from species
+    qs, ms, Ps = [], [], []
+    for s in species
+        push!(qs,s.q)
+        push!(ms,s.m)
+        push!(Ps,s.P)
+    end
+
+    # domains
+    xs_int = xs .∈ Interval(lb, ub)
+    vs_int = vs .∈ Interval(lb, ub)
+    t_int = t ∈ Interval(time_lb, time_ub)
+
+    domains = [t_int;xs_int;vs_int]
+
+    # helpers
+    _Es = [E(t,xs...) for E in Es]
+    _fs = [f(t,xs...,vs...) for f in fs]
+    _Is = [I(t,xs...,vs...) for I in Is]
+
+    # divergences
+    div_vs = [divergence(Dxs, _f, vs) for _f in _fs]
+    div_E = divergence(Dxs, _Es)
+    Fs = [qs[i]/ms[i] * _Es for i in eachindex(qs)]
+    divv_Fs = [divergence(Dvs, _fs[i], Fs[i]) for i in eachindex(_fs)]
+
+    # charge density
+    ρ = sum([qs[i] * _Is[i] for i in eachindex(qs)])
+
+    # equations
+    vlasov_eqs = Dt.(_fs) .~ .- div_vs .- divv_Fs
+    div_E_eq = div_E ~ ρ/ϵ_0
+    eqs = [vlasov_eqs; div_E_eq]
+
+    # boundary and initial conditions
+    vlasov_ics = [fs[i](0,xs...,vs...) ~ Ps[i] * geometry(xs) for i in eachindex(fs)]
+    div_E_ic = div_E ~ sum([qs[i] * Is[i](0,xs...,vs...) for i in eachindex(qs)])/ϵ_0 * geometry(xs) # TODO is this right in high dimensions?
+    # TODO does E need boundary conditions?
+
+    bcs_ = [vlasov_ics; div_E_ic]
+
+    # neural integral
+    ints_ = _I.(_fs) .~ _Is 
+
+    # set up and return PDE System
+    bcs = [bcs_;ints_]
+    vars = [_fs...; _Is...; _Es...]
+    @named pde_system = PDESystem(eqs, bcs, domains, [t,xs...,vs...], vars)
+
+    # set up problem
+    il = inner_layers
+    ps_chains = [FastChain(FastDense(length(domains), il, Flux.σ), FastDense(il,il,Flux.σ), FastDense(il, 1)) for _ in 1:length([_fs; _Is; vcat(_Ivs...)])]
+    xs_chains = [FastChain(FastDense(length([t, xs...]), il, Flux.σ), FastDense(il,il,Flux.σ), FastDense(il, 1)) for _ in 1:length(_Es)]
+    chain = [ps_chains;xs_chains]
+    initθ = GPU ? map(c -> CuArray(Float64.(c)), DiffEqFlux.initial_params.(chain)) : map(c -> Float64.(c), DiffEqFlux.initial_params.(chain)) 
+    discretization = NeuralPDE.PhysicsInformedNN(chain, QuadratureTraining(), init_params=initθ)
+    prob = SciMLBase.discretize(pde_system, discretization)
+    
+    # solve
+    opt = Optim.BFGS()
+    res = GalacticOptim.solve(prob, opt, cb = print_loss(prob), maxiters=200)
+    prob = remake(prob, u0=res.minimizer)
+    res = GalacticOptim.solve(prob, ADAM(0.01), cb = print_loss(prob), maxiters=10000)
+    prob = remake(prob, u0=res.minimizer)
+    res = GalacticOptim.solve(prob, opt, cb = print_loss(prob), maxiters=200)
+    phi = discretization.phi
+    return phi, res, initθ
+end
+
+"""
+Get the curl of a vector f w.r.t Ds
+"""
+function curl(vec, Ds)
+    [Ds[2](vec[3]) - Ds[3](vec[2]), Ds[3](vec[1]) - Ds[1](vec[3]), Ds[1](vec[2]) - Ds[2](vec[1])]
+end
+
+"""
+Get the divergence of a function f w.r.t Ds with the option of multiplying each part of the sum by a v
+"""
+function divergence(Ds, f, v=ones(length(Ds)))
+    if f isa AbstractArray
+        sum([v[i] * Ds[i](f[i]) for i in eachindex(Ds)])
+    else
+        sum([v[i] * Ds[i](f) for i in eachindex(Ds)])
+    end
+end
+
+"""
+Print the loss of the loss function
+"""
+function print_loss(prob)
     pde_inner_loss_functions = prob.f.f.loss_function.pde_loss_function.pde_loss_functions.contents
     inner_loss_functions = prob.f.f.loss_function.bcs_loss_function.bc_loss_functions.contents
-    bcs_inner_loss_functions = inner_loss_functions[1:4]
-    aprox_integral_loss_functions = inner_loss_functions[5:end]
 
     cb = function (p,l)
         println("Current loss is: $l")
         println("pde_losses: ", map(l_ -> l_(p), pde_inner_loss_functions))
-        println("bcs_losses: ", map(l_ -> l_(p), bcs_inner_loss_functions))
+        println("bcs_losses: ", map(l_ -> l_(p), inner_loss_functions))
         return false
     end
-
-    # Solve
-    opt = Optim.BFGS()
-    res = GalacticOptim.solve(prob, opt, cb = cb, maxiters=200)
-    prob = remake(prob, u0=res.minimizer)
-    res = GalacticOptim.solve(prob, ADAM(0.01), cb = cb, maxiters=10000)
-    prob = remake(prob, u0=res.minimizer)
-    res = GalacticOptim.solve(prob, opt, cb = cb, maxiters=200)
-    phi = discretization.phi
-    return phi, res, initθ
+    
+    return cb
 end
-
-#### Output training ####
-cb = function (p,l)
-    println("Current loss is: $l")
-    return false
-end
-
-#### Save & load methods ####
-function save_results(phi, res, model_name)
-    @save model_name*"_phi.bson" phi
-    minimizers_ = [res.minimizer[s] for s in sep]
-    @save model_name*"_minimizers_.bson" minimizers_
-end
-
-function load_results(phi_path, minimizers_path)
-    loaded_phi = BSON.load(phi_path)[:phi]
-    loaded_weights = BSON.load(minimizers_path)[:minimizers_]
-    return loaded_phi, loaded_weights
-end
-
-#### Plot ####
-function plot_3D(phi, minimizers_, model_name="")
-    # plots f, E, B    
-end
-
-function plot_E_1D(phi, minimizers_, model_name="")
-    anim = @animate for t ∈ ts
-        @info "Animating frame t..."
-        u_predict_E = reshape([phi[2]([t,x], minimizers_[2])[1] for x in xs], length(xs))
-        p1 = plot(xs, u_predict_E, label="", title="E")
-        plot(p1)
-    end
-    gif(anim,model_name*"E.gif", fps=10)
-end
-
-function plot_f_1D(phi, minimizers_, model_name="")
-    anim = @animate for t ∈ ts
-        @info "Animating frame t..."
-        u_predict_f = reshape([phi[1]([t,x,v], minimizers_[1])[1] for x in xs for v in vs], length(xs), length(vs))
-        p1 = plot(xs, vs, u_predict_f, st=:surface, label="", title="f")
-        plot(p1)
-    end
-    gif(anim,model_name*"f.gif", fps=10)
-end
-
-function solve_1D_electrostatic_plasma(params, lb, ub; time_lb=lb, time_ub=ub, GPU=true)
-    @parameters t x v
-    @variables f(..) E(..) 
-    Dx = Differential(x)
-    Dt = Differential(t)
-    Dv = Differential(v)
-
-    # Constants
-    ε_0 = 8.8541878128e-12 # F ms⁻¹
-    e   = 1.602176634e-19 # Coulombs
-    m_e = 9.10938188e-31 # Kg
-    n_0 = 1
-
-    # Space
-    domains = [t ∈ Interval(time_lb, time_ub),
-            x ∈ Interval(lb, ub), 
-            v ∈ Interval(lb, ub)]
-
-    # Integrals
-    Iv = Integral(v in DomainSets.ClosedInterval(-Inf, Inf)) 
-
-    # Equations
-    eqs = [Dt(f(t,x,v)) ~ - v * Dx(f(t,x,v)) - e/m_e * E(t,x) * Dv(f(t,x,v))
-        Dx(E(t,x)) ~ e*n_0/ε_0 * (Iv(f(t,x,v)) - 1)]
-
-    bcs = [f(0,x,v) ~ params.geometry(v) * params.IC(v),
-        E(0,x) ~ params.geometry(v) * e*n_0/ε_0 * (Iv(f(0,x,v)) - 1) * x,
-        E(t,0) ~ 0]
-
-
-    # Neural Network
-    CUDA.allowscalar(false)
-    chain = [FastChain(FastDense(3, 16, Flux.σ), FastDense(16,16,Flux.σ), FastDense(16, 1)),
-            FastChain(FastDense(2, 16, Flux.σ), FastDense(16,16,Flux.σ), FastDense(16, 1))]
-
-    initθ = GPU ? map(c -> CuArray(Float64.(c)), DiffEqFlux.initial_params.(chain)) : map(c -> Float64.(c), DiffEqFlux.initial_params.(chain)) 
-
-
-    discretization = NeuralPDE.PhysicsInformedNN(chain, QuadratureTraining(), init_params= initθ)
-    @named pde_system = PDESystem(eqs, bcs, domains, [t,x,v], [f(t,x,v), E(t,x)])
-    prob = SciMLBase.discretize(pde_system, discretization)
-
-    # Solve
-    pde_inner_loss_functions = prob.f.f.loss_function.pde_loss_function.pde_loss_functions.contents
-    bcs_inner_loss_functions = prob.f.f.loss_function.bcs_loss_function.bc_loss_functions.contents
-
-    cb = function (p,l)
-        println("Current loss is: $l")
-        println("pde_losses: ", map(l_ -> l_(p), pde_inner_loss_functions))
-        println("bcs_losses: ", map(l_ -> l_(p), bcs_inner_loss_functions))
-        return false
-    end
-
-    opt = Optim.BFGS()
-    res = GalacticOptim.solve(prob, opt, cb = cb, maxiters=200)
-    prob = remake(prob, u0=res.minimizer)
-    res = GalacticOptim.solve(prob, ADAM(0.01), cb = cb, maxiters=10000)
-    prob = remake(prob, u0=res.minimizer)
-    res = GalacticOptim.solve(prob, opt, cb = cb, maxiters=200)
-    phi = discretization.phi
-
-    return phi, res, initθ
-end
-
-
-#= Zukunftsmusik
-
-
-function get_initial_electrostatic_conditions(isMaxwellian=true)
-    # error if f of initial condition is < 0
-end
-
-function get_initial_collisionless_conditions(isMaxwellian=true)
-    # error if f of initial condition is < 0
-end
-
-function compose_results(dim=3)
-end
-
-function decompose_domains(dim=3)
-end
-
-#v1
-# give me a domain (of type Interval(i, j))
-# give me a geometry
-# give me initial conditions (for f)
-
-#>v2
-# give me external coils
-# give me external forces (for ICF)
-# give me the properties on the boundaries
-# and I give you how this plasma will move with time
-
-# what is the strategy (the user doesn't need to know), how should it reflect in the boundaries? how many v and x dimensions? what are the bounds
-# in the future we can set a geometry and size of a mesh
-# it should probably start with an empty mesh, I can add the plasma geometry to the mesh, then add magnets to the mesh, and solve in the mesh which initializes all moving parts.
-
-
-function solve_collisional_plasma(dim=3)
-    return
-end
-
-function solve_relativistic_plasma(dim=3)
-    return
-end
-
-function validate_collisionless_plasma()
-    # Some method of manufactured solution or analytical approach that tells me how far off the model is
-    return
-end
-
-function validate_electrostatic_plasma()
-    return
-end
-
-function validate_collisional_plasma()
-    return
-end
-
-function validate_relativistic_plasma()
-    return
-end
-
-function plot_electrostatic_plasma(dim=3)
-    return
-end
-
-function plot_collisionless_plasma(dim=3)
-    return
-end
-
-=#

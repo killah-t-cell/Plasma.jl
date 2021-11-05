@@ -6,15 +6,17 @@ using GalacticOptim
 using DiffEqFlux
 using NeuralPDE
 using LinearAlgebra
+using DomainSets
 using Parameters
 import ModelingToolkit: Interval, infimum, supremum
 
-include("solve.jl")
-include("geometry.jl")
-include("distribution.jl")
-include("analyze.jl")
-
 abstract type AbstractPlasma end
+
+abstract type AbstractGeometry end
+
+abstract type AbstractDistribution end
+
+abstract type AbstractCoil end
 
 # TODO Species could be more elegant. It feels a bit hacky
 struct Species{ T <: Number }
@@ -52,6 +54,11 @@ struct Constants{ T <: Number}
         new{typeof(μ_0)}(μ_0, ϵ_0)
     end
 end
+
+include("solve.jl")
+include("geometry.jl")
+include("distribution.jl")
+include("analyze.jl")
 
 export CollisionlessPlasma, ElectrostaticPlasma
 export AbstractDistribution, Maxwellian
