@@ -124,16 +124,16 @@ function solve_collisionless_plasma(params, lb, ub; time_lb=lb, time_ub=ub, GPU=
     Div_E = Dx(E[1]) + Dy(E[2]) + Dz(E[3])
     
     ρ = q_e * Ivfe(t,x,y,z,vx,vy,vz) + q_i * Ivfi(t,x,y,z,vx,vy,vz)
-    J = [q_e * Iv(vx * fe(t,x,y,z,vx,vy,vz)) + q_i * Iv(vx * fi(t,x,y,z,vx,vy,vz)), q_e * Iv(vy * fe(t,x,y,z,vx,vy,vz)) + q_i * Iv(vy * fi(t,x,y,z,vx,vy,vz)), q_e * Iv(vz * fe(t,x,y,z,vx,vy,vz)) + q_i * Iv(vz * fi(t,x,y,z,vx,vy,vz))]
+    J = [q_e * Ivvxfe(t,x,y,z,vx,vy,vz) + q_i * Ivvxfi(t,x,y,z,vx,vy,vz), q_e * Ivvyfe(t,x,y,z,vx,vy,vz) + q_i * Ivvyfi(t,x,y,z,vx,vy,vz), q_e * Ivvzfe(t,x,y,z,vx,vy,vz) + q_i * Ivvzfi(t,x,y,z,vx,vy,vz)]
     
     eqs = [Dt(fe(t,x,y,z,vx,vy,vz)) ~ - Divx_v_e - Divv_F_e,
            Dt(fi(t,x,y,z,vx,vy,vz)) ~ - Divx_v_i - Divv_F_i,
            curl(E)[1] ~ Dt(Bx(t,x,y,z)),
            curl(E)[2] ~ Dt(By(t,x,y,z)),
            curl(E)[3] ~ Dt(Bz(t,x,y,z)),
-           ε_0*μ_0 * Dx(E[1]) - curl(B)[1] ~ - μ_0*J[1],
-           ε_0*μ_0 * Dx(E[2]) - curl(B)[2] ~ - μ_0*J[2],
-           ε_0*μ_0 * Dx(E[3]) - curl(B)[3] ~ - μ_0*J[3],
+           ε_0*μ_0 * Dt(E[1]) - curl(B)[1] ~ - μ_0*J[1],
+           ε_0*μ_0 * Dt(E[2]) - curl(B)[2] ~ - μ_0*J[2],
+           ε_0*μ_0 * Dt(E[3]) - curl(B)[3] ~ - μ_0*J[3],
            Div_E ~ ρ/ε_0,
            Div_B ~ 0]
     
@@ -155,14 +155,15 @@ function solve_collisionless_plasma(params, lb, ub; time_lb=lb, time_ub=ub, GPU=
     bcs = [bcs_;ints_]
 
     # Neural Network
+    vars = [fe(t,x,y,z,vx,vy,vz), fi(t,x,y,z,vx,vy,vz), Ex(t,x,y,z), Ey(t,x,y,z), Ez(t,x,y,z), Bx(t,x,y,z), By(t,x,y,z), Bz(t,x,y,z)]
+    @named pde_system = PDESystem(eqs, bcs, domains, [t,x,y,z,vx,vy,vz], vars)
+
     CUDA.allowscalar(false)
     chain = [[FastChain(FastDense(7, 16, Flux.σ), FastDense(16,16,Flux.σ), FastDense(16, 1)) for _ in 1:2];
             [FastChain(FastDense(4, 16, Flux.σ), FastDense(16,16,Flux.σ), FastDense(16, 1)) for _ in 1:8]]
     initθ = GPU ? map(c -> CuArray(Float64.(c)), DiffEqFlux.initial_params.(chain)) : map(c -> Float64.(c), DiffEqFlux.initial_params.(chain)) 
     
     discretization = NeuralPDE.PhysicsInformedNN(chain, QuadratureTraining(), init_params=initθ)
-    vars = [fe(t,x,y,z,vx,vy,vz), fi(t,x,y,z,vx,vy,vz), Ex(t,x,y,z), Ey(t,x,y,z), Ez(t,x,y,z), Bx(t,x,y,z), By(t,x,y,z), Bz(t,x,y,z)]
-    @named pde_system = PDESystem(eqs, bcs, domains, [t,x,y,z,vx,vy,vz], vars)
     prob = SciMLBase.discretize(pde_system, discretization)
 
     pde_inner_loss_functions = prob.f.f.loss_function.pde_loss_function.pde_loss_functions.contents

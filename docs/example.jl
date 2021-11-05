@@ -10,29 +10,36 @@ g = Geometry(v -> if (v > 0.2 && v < 0.3) 1. else 0. end)
 
 plasma = CollisionlessPlasma(species, g)
 
-solve(plasma)
+solve(plasma) # TODO need to specify range
 
 # WHAT IT SHOULD LOOK LIKE!!
 # Should geometries and distribution be structs or functions?
+# How do I define some useful atoms? Use the Species struct for it. https://github.com/JuliaPhysics/PeriodicTable.jl/blob/master/src/PeriodicTable.jl # const elements = Elements(_elements_data)
+# start with e, p, H₂, H₃, He₄, Li₆, Li₇, B₁₁
+# species (IC, m, q), number of species, geometry, plasma type.
+
 using Plasma
-import Stellerator: Stella
 
-sp = @species begin
-    P(0.5, H₃)
-    Maxwellian(0.3, H₂)
-    Kappa(e)
-end
+sp = [P(species.H₃), Maxwellian(T, v, species.H₂.m), Kappa(T,v, species.e.m)]
 
-g1 = ToroidalGeometry(a0=a0, R0=R0, I=2.2)
+    species[H₃]
 
-plasma1 = CollisionlessPlasma(g1, sp)
-sol = solve(plasma1)
+g = ToroidalGeometry(a0=a0, R0=R0, I=2.2)
+
+plasma = CollisionlessPlasma(g, sp)
+sol = solve(plasma) 
 
 plot(sol)
-sol.f([0.1,0.2,0.3,0.4,0.5,0.6])
-sol.v_th([0.1,0.2,0.3,0.4,0.5,0.6])
 
+point = [0.1,2.2,9.3,7.4,4.8,3.6]
+sol.f(point)
+sol.v_th(point .+ 0.1)
+
+
+#=
 # Ex 2
+import Stellerator: Stella
+
 g2 = Geometry(Stella) # Bitvector with Stellerator format
 plasma2 = Electrostatic(g2, sp)
 sol = solve(plasma2, dim=3)
@@ -40,7 +47,14 @@ sol = solve(plasma2, dim=3)
 plot(sol.n)
 plot(sol.ω_ce)
 
-
-function explode(arg::T) where {T <: Number}
+sp = @species begin
+    H₃ -> P, 0.5
+    H₂ -> Maxwellian, 0.5
+    e -> Kappa, 0.5
 end
+=#
 
+using Plasma
+
+@species e H₃
+geometry = ToroidalGeometry(a0=a0,r0=r0)

@@ -41,10 +41,21 @@ struct ElectrostaticPlasma{ T, G <: AbstractGeometry } <: AbstractPlasma
     species::Vector{Species{T}}
     geometry::G
 end
+struct Constants{ T <: Number}
+    μ_0::T
+    ϵ_0::T
+
+    function Constants()
+        μ_0 = 1.25663706212e-6 # N A⁻²
+        ϵ_0 = 8.8541878128e-12 # F ms⁻¹
+        new{typeof(μ_0)}(μ_0, ϵ_0)
+    end
+end
 
 export CollisionlessPlasma, ElectrostaticPlasma
 export AbstractDistribution, Maxwellian
 export Geometry
 export Species
+export Constants
 
 end
