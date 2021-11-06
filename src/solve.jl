@@ -140,7 +140,12 @@ function solve(plasma::ElectrostaticPlasma;
 
     # integrals
     Is = Symbolics.variables(:I, eachindex(fs); T=SymbolicUtils.FnType{Tuple,Real})
-    _I = Integral(tuple(vs...) in DomainSets.ProductDomain(ClosedInterval(-Inf ,Inf), ClosedInterval(-Inf ,Inf), ClosedInterval(-Inf ,Inf)))    
+    if length(vs) > 1
+        intervals = [ClosedInterval(-Inf ,Inf) for _ in 1:length(vs)]
+        _I = Integral(tuple(vs...) in DomainSets.ProductDomain(intervals...))
+    else
+        _I = Integral(first(vs) in DomainSets.ClosedInterval(-Inf ,Inf))
+    end
 
     # differentials
     Dxs = Differential.(xs)
@@ -198,7 +203,7 @@ function solve(plasma::ElectrostaticPlasma;
 
     # set up problem
     il = inner_layers
-    ps_chains = [FastChain(FastDense(length(domains), il, Flux.σ), FastDense(il,il,Flux.σ), FastDense(il, 1)) for _ in 1:length([_fs; _Is; vcat(_Ivs...)])]
+    ps_chains = [FastChain(FastDense(length(domains), il, Flux.σ), FastDense(il,il,Flux.σ), FastDense(il, 1)) for _ in 1:length([_fs; _Is])]
     xs_chains = [FastChain(FastDense(length([t, xs...]), il, Flux.σ), FastDense(il,il,Flux.σ), FastDense(il, 1)) for _ in 1:length(_Es)]
     chain = [ps_chains;xs_chains]
     initθ = GPU ? map(c -> CuArray(Float64.(c)), DiffEqFlux.initial_params.(chain)) : map(c -> Float64.(c), DiffEqFlux.initial_params.(chain)) 

@@ -10,7 +10,7 @@ g = Geometry()
 
 plasma = ElectrostaticPlasma(species, g)
 
-Plasma.solve(plasma, g)
+Plasma.solve(plasma; dim=1, GPU=false)
 
 # WHAT IT SHOULD LOOK LIKE!!
 # Should geometries and distribution be structs or functions?
