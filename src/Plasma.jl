@@ -17,31 +17,33 @@ abstract type AbstractGeometry end
 abstract type AbstractDistribution end
 
 abstract type AbstractCoil end
-
-# TODO Species could be more elegant. It feels a bit hacky
 struct Species{ T <: Number }
     q::T # charge in C
     m::T # mass in Kg
-    P::T # probability distribution : 0 ≤ P ≤ 1
 
-    function Species(P, q=1.602176634e-19, m=9.10938188e-31)
-        if P < 0.0
-            error("distribution should be non-negative")
-        end
-        if P > 1.0
-            error("distribution should not exceed 1")
-        end
+    function Species(q=-1.602176634e-19, m=9.10938188e-31)
         new{typeof(q)}(
-            q, m, P
+            q, m
         )
     end
 end
-struct CollisionlessPlasma{ T, G <: AbstractGeometry } <: AbstractPlasma
-    species::Vector{Species{T}}
+struct Distribution <: AbstractDistribution
+    P::Function
+    species::Species
+end
+struct Geometry{F <: Function} <: AbstractGeometry
+    f::F
+
+    function Geometry(f= _ -> 1)
+        new{typeof(f)}(f)
+    end
+end
+struct CollisionlessPlasma{ G <: AbstractGeometry } <: AbstractPlasma
+    distributions::Vector{Distribution}
     geometry::G
 end
-struct ElectrostaticPlasma{ T, G <: AbstractGeometry } <: AbstractPlasma
-    species::Vector{Species{T}}
+struct ElectrostaticPlasma{ G <: AbstractGeometry } <: AbstractPlasma
+    distributions::Vector{Distribution}
     geometry::G
 end
 struct Constants{ T <: Number}
@@ -55,15 +57,24 @@ struct Constants{ T <: Number}
     end
 end
 
+const species = (
+    e = Species(),
+    p = Species(1.602176634e-19 ,1.673523647e-27),
+    D = Species(1.602176634e-19 ,3.344476425e-27),
+    T = Species(1.602176634e-19 ,5.00735588e-27),
+    He³ = Species(1.602176634e-19 ,5.00641192e-27),
+    He⁴ = Species(1.602176634e-19 ,6.64465620e-27),
+)
+
+include("distribution.jl")
 include("solve.jl")
 include("geometry.jl")
-include("distribution.jl")
 include("analyze.jl")
 
 export CollisionlessPlasma, ElectrostaticPlasma
-export AbstractDistribution, Maxwellian
+export Distribution, Maxwellian
 export Geometry
-export Species
+export Species, species
 export Constants
 
 end

@@ -1,60 +1,45 @@
+#### Pretty example program
 using Plasma
 
-# WHAT IT LOOKS LIKE NOW
-# TODO can we somehow just let the users pick which particles they want without having to build them?
-e = Species(Maxwellian(1,3,2).P)
-i = Species(Maxwellian(1.1,3.3,2.3).P,1.602176634e-19, 3.3435837724e-27)
+TD = 30000 # eV
+Te = 10000 # eV
 
-species = [e]
-g = Geometry()
+D = species.D
+e = species.e
+e.q
+e.m
 
-plasma = ElectrostaticPlasma(species, g)
+D_D = Distribution(Maxwellian(TD, D.m), D)
+D_e = Distribution(Maxwellian(Te, e.m), e)
+G = Geometry()
 
-Plasma.solve(plasma; dim=1, GPU=false)
+typeof([D_D, D_e])
+plasma = ElectrostaticPlasma([D_D, D_e], G)
 
-# WHAT IT SHOULD LOOK LIKE!!
-# Should geometries and distribution be structs or functions?
-# How do I define some useful atoms? Use the Species struct for it. https://github.com/JuliaPhysics/PeriodicTable.jl/blob/master/src/PeriodicTable.jl # const elements = Elements(_elements_data)
-# start with e, p, H₂, H₃, He₄, Li₆, Li₇, B₁₁
-# species (IC, m, q), number of species, geometry, plasma type.
+Plasma.solve(plasma, dim=1, GPU=false) 
 
+
+#### custom P example 
 using Plasma
 
-sp = [P(species.H₃), Maxwellian(T, v, species.H₂.m), Kappa(T,v, species.e.m)]
+TD = 30000 # eV
+Te = 10000 # eV
 
-    species[H₃]
+D = species.D
+e = species.e
+e.q
+e.m
 
-g = ToroidalGeometry(a0=a0, R0=R0, I=2.2)
-
-plasma = CollisionlessPlasma(g, sp)
-sol = solve(plasma) 
-
-plot(sol)
-
-point = [0.1,2.2,9.3,7.4,4.8,3.6]
-sol.f(point)
-sol.v_th(point .+ 0.1)
-
-
-#=
-# Ex 2
-import Stellerator: Stella
-
-g2 = Geometry(Stella) # Bitvector with Stellerator format
-plasma2 = Electrostatic(g2, sp)
-sol = solve(plasma2, dim=3)
-
-plot(sol.n)
-plot(sol.ω_ce)
-
-sp = @species begin
-    H₃ -> P, 0.5
-    H₂ -> Maxwellian, 0.5
-    e -> Kappa, 0.5
+function customP(T, m) 
+    P(x,v) = sqrt(sum(v .^2)) * x + m / exp(T)
 end
-=#
 
-using Plasma
+D_D = Distribution(Maxwellian(TD, D.m), D)
+D_x = Distribution(customP(Te, e.m), e)
+G = Geometry()
 
-@species e H₃
-geometry = ToroidalGeometry(a0=a0,r0=r0)
+typeof([D_D, D_e])
+plasma = ElectrostaticPlasm([D_D, D_e], G)
+
+Plasma.solve(plasma, dim=1, GPU=false) 
+

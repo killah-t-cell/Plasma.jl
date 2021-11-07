@@ -10,10 +10,19 @@ function solve(plasma::CollisionlessPlasma;
 
     # constants
     dim = 3
-    species = plasma.species
     geometry = plasma.geometry.f # this might change with a geometry refactor
+    dis = plasma.distributions
+    species = [d.species for d in dis]
     consts = Constants()
     μ_0, ϵ_0 = consts.μ_0, consts.ϵ_0
+    
+    # get qs, ms, Ps from species
+    qs, ms = [], []
+    for s in species
+        push!(qs,s.q)
+        push!(ms,s.m)
+    end
+    Ps = [d.P for d in dis]
 
     # variables
     fs = Symbolics.variables(:f, eachindex(species); T=SymbolicUtils.FnType{Tuple,Real})
@@ -33,14 +42,6 @@ function solve(plasma::CollisionlessPlasma;
     Dxs = Differential.(xs)
     Dvs = Differential.(vs)
     Dt = Differential(t)
-
-    # get qs, ms, Ps from species
-    qs, ms, Ps = [], [], []
-    for s in species
-        push!(qs,s.q)
-        push!(ms,s.m)
-        push!(Ps,s.P)
-    end
 
     # domains
     xs_int = xs .∈ Interval(lb, ub)
@@ -76,7 +77,7 @@ function solve(plasma::CollisionlessPlasma;
     eqs = [vlasov_eqs; curl_E_eqs; curl_B_eqs; div_E_eq; div_B_eq]
 
     # boundary and initial conditions
-    vlasov_ics = [fs[i](0,xs...,vs...) ~ Ps[i] * geometry(xs) for i in eachindex(fs)]
+    vlasov_ics = [fs[i](0,xs...,vs...) ~ Ps[i](xs,vs) * geometry(xs) for i in eachindex(fs)]
     div_B_ic = div_B ~ 0
     div_E_ic = div_E ~ sum([qs[i] * Is[i](0,xs...,vs...) for i in eachindex(qs)])/ϵ_0 * geometry(xs)
     
@@ -124,11 +125,19 @@ function solve(plasma::ElectrostaticPlasma;
     end
 
     # constants
-    species = plasma.species
     geometry = plasma.geometry.f # this might change with a geometry refactor
-
+    dis = plasma.distributions
+    species = [d.species for d in dis]
     consts = Constants()
     μ_0, ϵ_0 = consts.μ_0, consts.ϵ_0
+
+    # get qs, ms, Ps from species
+    qs, ms = [], []
+    for s in species
+        push!(qs,s.q)
+        push!(ms,s.m)
+    end
+    Ps = [d.P for d in dis]
 
     # variables
     fs = Symbolics.variables(:f, eachindex(species); T=SymbolicUtils.FnType{Tuple,Real})
@@ -152,13 +161,6 @@ function solve(plasma::ElectrostaticPlasma;
     Dvs = Differential.(vs)
     Dt = Differential(t)
 
-    # get qs, ms, Ps from species
-    qs, ms, Ps = [], [], []
-    for s in species
-        push!(qs,s.q)
-        push!(ms,s.m)
-        push!(Ps,s.P)
-    end
 
     # domains
     xs_int = xs .∈ Interval(lb, ub)
@@ -187,7 +189,7 @@ function solve(plasma::ElectrostaticPlasma;
     eqs = [vlasov_eqs; div_E_eq]
 
     # boundary and initial conditions
-    vlasov_ics = [fs[i](0,xs...,vs...) ~ Ps[i] * geometry(xs) for i in eachindex(fs)]
+    vlasov_ics = [fs[i](0,xs...,vs...) ~ Ps[i](xs,vs) * geometry(xs) for i in eachindex(fs)]
     div_E_ic = div_E ~ sum([qs[i] * Is[i](0,xs...,vs...) for i in eachindex(qs)])/ϵ_0 * geometry(xs) # TODO is this right in high dimensions?
     # TODO does E need boundary conditions?
 
