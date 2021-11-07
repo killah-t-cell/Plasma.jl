@@ -46,6 +46,12 @@ struct ElectrostaticPlasma{ G <: AbstractGeometry } <: AbstractPlasma
     distributions::Vector{Distribution}
     geometry::G
 end
+struct PlasmaSolution{ P <: AbstractPlasma, PHI, RE, IN }
+    plasma::P
+    phi::PHI
+    res::RE
+    initθ::IN
+end
 struct Constants{ T <: Number}
     μ_0::T
     ϵ_0::T
@@ -71,7 +77,7 @@ include("solve.jl")
 include("geometry.jl")
 include("analyze.jl")
 
-export CollisionlessPlasma, ElectrostaticPlasma
+export CollisionlessPlasma, ElectrostaticPlasma, PlasmaSolution
 export Distribution, Maxwellian
 export Geometry
 export Species, species

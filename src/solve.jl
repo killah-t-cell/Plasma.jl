@@ -111,7 +111,7 @@ function solve(plasma::CollisionlessPlasma;
     prob = remake(prob, u0=res.minimizer)
     res = GalacticOptim.solve(prob, opt, cb = print_loss(prob), maxiters=200)
     phi = discretization.phi
-    return phi, res, initθ
+    return PlasmaSolution(plasma, phi, res, initθ)
 end
 
 """
@@ -220,7 +220,7 @@ function solve(plasma::ElectrostaticPlasma;
     prob = remake(prob, u0=res.minimizer)
     res = GalacticOptim.solve(prob, opt, cb = print_loss(prob), maxiters=200)
     phi = discretization.phi
-    return phi, res, initθ
+    return PlasmaSolution(plasma, phi, res, initθ)
 end
 
 """

@@ -16,8 +16,9 @@ G = Geometry()
 typeof([D_D, D_e])
 plasma = ElectrostaticPlasma([D_D, D_e], G)
 
-Plasma.solve(plasma, dim=1, GPU=false) 
+sol = Plasma.solve(plasma, dim=1, GPU=false) 
 
+plot(sol)
 
 #### custom P example 
 using Plasma
@@ -39,7 +40,8 @@ D_x = Distribution(customP(Te, e.m), e)
 G = Geometry()
 
 typeof([D_D, D_e])
-plasma = ElectrostaticPlasm([D_D, D_e], G)
+plasma = CollisionlessPlasma([D_D, D_e], G)
 
-Plasma.solve(plasma, dim=1, GPU=false) 
+Plasma.solve(plasma, GPU=false)
 
+plot(sol)
