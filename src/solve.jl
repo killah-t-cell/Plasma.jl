@@ -232,13 +232,11 @@ function solve(plasma::ElectrostaticPlasma;
     
     # solve
     opt = Optim.BFGS()
-    res = GalacticOptim.solve(prob, opt, cb = print_loss(prob), maxiters=2)
-    #=
+    res = GalacticOptim.solve(prob, opt, cb = print_loss(prob), maxiters=200)
     prob = remake(prob, u0=res.minimizer)
     res = GalacticOptim.solve(prob, ADAM(0.01), cb = print_loss(prob), maxiters=10000)
     prob = remake(prob, u0=res.minimizer)
     res = GalacticOptim.solve(prob, opt, cb = print_loss(prob), maxiters=200)
-    =#
     phi = discretization.phi
 
     return PlasmaSolution(plasma, vars, dict_vars, phi, res, initθ, domains)

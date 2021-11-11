@@ -14,7 +14,7 @@ plasma = ElectrostaticPlasma([D_D, D_e], G)
 
 sol = Plasma.solve(plasma, dim=1, GPU=false) 
 
-plot(sol)
+plot_plasma(sol)
 
 """
 2D with custom P and species
