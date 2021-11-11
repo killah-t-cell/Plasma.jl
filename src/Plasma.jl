@@ -46,11 +46,14 @@ struct ElectrostaticPlasma{ G <: AbstractGeometry } <: AbstractPlasma
     distributions::Vector{Distribution}
     geometry::G
 end
-struct PlasmaSolution{ P <: AbstractPlasma, PHI, RE, IN }
+struct PlasmaSolution{ P <: AbstractPlasma, V, DV, PHI, PHID, RE, IN, DO }
     plasma::P
+    vars::V
+    dict_vars::DV
     phi::PHI
     res::RE
     initθ::IN
+    domains::DO
 end
 struct Constants{ T <: Number}
     μ_0::T
@@ -75,7 +78,7 @@ const species = (
 include("distribution.jl")
 include("solve.jl")
 include("geometry.jl")
-include("analyze.jl")
+# include("analyze.jl")
 
 export CollisionlessPlasma, ElectrostaticPlasma, PlasmaSolution
 export Distribution, Maxwellian

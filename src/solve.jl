@@ -111,7 +111,17 @@ function solve(plasma::CollisionlessPlasma;
     prob = remake(prob, u0=res.minimizer)
     res = GalacticOptim.solve(prob, opt, cb = print_loss(prob), maxiters=200)
     phi = discretization.phi
-    return PlasmaSolution(plasma, phi, res, initθ)
+
+    # get phi_dict
+    phase_space_vars = [fs; Is; Ivs]
+    configuration_space_vars = [Es; Bs]
+    phase_space_dict = Dict(phase_space_vars[i] => phi[i] for i in eachindex(phase_space_vars))
+    length_phi_config = length(phase_space_vars):(length(phase_space_vars)+length(configuration_space_vars))
+    configuration_dict = Dict(var => phi[i] for var in configuration_space_vars for i in length_phi_config)
+    phi_dict = [phase_space_dict, configuration_dict]
+    
+
+    return PlasmaSolution(plasma, phi, phi_dict, res, initθ, domains)
 end
 
 """
@@ -190,7 +200,7 @@ function solve(plasma::ElectrostaticPlasma;
 
     # boundary and initial conditions
     vlasov_ics = [fs[i](0,xs...,vs...) ~ Ps[i](xs,vs) * geometry(xs) for i in eachindex(fs)]
-    div_E_ic = div_E ~ sum([qs[i] * Is[i](0,xs...,vs...) for i in eachindex(qs)])/ϵ_0 * geometry(xs) # TODO is this right in high dimensions?
+    div_E_ic = div_E ~ sum([qs[i] * Is[i](0,xs...,vs...) for i in eachindex(qs)])/ϵ_0 * geometry(xs) 
     # TODO does E need boundary conditions?
 
     bcs_ = [vlasov_ics; div_E_ic]
@@ -198,10 +208,18 @@ function solve(plasma::ElectrostaticPlasma;
     # neural integral
     ints_ = _I.(_fs) .~ _Is 
 
-    # set up and return PDE System
+    # set up variables # TODO turn this into a separate function
     bcs = [bcs_;ints_]
-    vars = [_fs...; _Is...; _Es...]
-    @named pde_system = PDESystem(eqs, bcs, domains, [t,xs...,vs...], vars)
+    vars_arg = [_fs; _Is; _Es]
+    vars = [fs; Is; Es]
+    
+    dict_vars = Dict()
+    for var in vars
+        push!(dict_vars, var => [v for v in var])    
+    end
+
+    # set up and return PDE System
+    @named pde_system = PDESystem(eqs, bcs, domains, [t,xs...,vs...], vars_arg)
 
     # set up problem
     il = inner_layers
@@ -214,13 +232,15 @@ function solve(plasma::ElectrostaticPlasma;
     
     # solve
     opt = Optim.BFGS()
-    res = GalacticOptim.solve(prob, opt, cb = print_loss(prob), maxiters=200)
+    res = GalacticOptim.solve(prob, opt, cb = print_loss(prob), maxiters=2)
     prob = remake(prob, u0=res.minimizer)
     res = GalacticOptim.solve(prob, ADAM(0.01), cb = print_loss(prob), maxiters=10000)
     prob = remake(prob, u0=res.minimizer)
     res = GalacticOptim.solve(prob, opt, cb = print_loss(prob), maxiters=200)
     phi = discretization.phi
-    return PlasmaSolution(plasma, phi, res, initθ)
+
+
+    return PlasmaSolution(plasma, vars, dict_vars, phi, res, initθ, domains)
 end
 
 """
