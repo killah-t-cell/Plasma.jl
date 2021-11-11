@@ -14,11 +14,9 @@ plasma = ElectrostaticPlasma([D_D, D_e], G)
 
 sol = Plasma.solve(plasma, dim=1, GPU=false) 
 
-plot_plasma(sol)
+Plasma.plot(sol)
 
-"""
-2D with custom P and species
-"""
+## 2D with custom P and species
 using Plasma
 
 Tα = 70000 # eV
@@ -39,9 +37,8 @@ Plasma.solve(plasma, dim=2) # with GPU
 plot(sol)
 # TODO check the value of n and T and other plasma parameter at point T
 
-"""
-3D CollisionlessPlasma
-"""
+
+## 3D CollisionlessPlasma
 using Plasma
 
 TD = 15000 # eV

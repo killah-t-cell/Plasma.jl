@@ -33,11 +33,14 @@ function get_predicts(sol, dx)
     return predicts
 end
 
-function plot_plasma(sol::PlasmaSolution, dx=0.1)
+function Plasma.plot(sol::PlasmaSolution, dx=0.1)
     predicts = get_predicts(sol, dx)
 
+    d = sol.domains[1]
+    ts = infimum(d.domain):dx:supremum(d.domain)
+
     for (var, predict) in predicts
-        plot_with_makie(var, predict, ds[1])
+        plot_with_makie(var, predict, ts)
     end
  
 end
@@ -85,5 +88,5 @@ function plot_with_makie(var, predict, ts)
     f[2, multigraph] = ls.layout
     connect!(i, ls.slider.value)
 
-    Makie.save("$var.png", f)
+    GLMakie.save("$var.png", f)
 end

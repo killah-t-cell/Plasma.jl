@@ -4,7 +4,7 @@ using Flux
 using ModelingToolkit
 using GalacticOptim
 using DiffEqFlux
-using Makie
+using GLMakie
 using NeuralPDE
 using LinearAlgebra
 using DomainSets
