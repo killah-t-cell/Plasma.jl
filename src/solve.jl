@@ -89,10 +89,18 @@ function solve(plasma::CollisionlessPlasma;
 
     ints_ = [f_ints; vcat(vf_ints...)]
 
-    # set up PDE System
+    # set up variables # TODO turn this into a separate function
     bcs = [bcs_;ints_]
-    vars = [_fs...; _Is...; _Ivs...; _Es...; _Bs...]
-    @named pde_system = PDESystem(eqs, bcs, domains, [t,xs...,vs...], vars)
+    vars_arg = [_fs...; _Is...; _Ivs...; _Es...; _Bs...]
+    vars = [fs; Is; Ivs; Bs; Es]
+    
+    dict_vars = Dict()
+    for var in vars
+        push!(dict_vars, var => [v for v in var])    
+    end
+
+    # set up PDE System
+    @named pde_system = PDESystem(eqs, bcs, domains, [t,xs...,vs...], vars_arg)
 
     # set up problem
     il = inner_layers
@@ -112,16 +120,8 @@ function solve(plasma::CollisionlessPlasma;
     res = GalacticOptim.solve(prob, opt, cb = print_loss(prob), maxiters=200)
     phi = discretization.phi
 
-    # get phi_dict
-    phase_space_vars = [fs; Is; Ivs]
-    configuration_space_vars = [Es; Bs]
-    phase_space_dict = Dict(phase_space_vars[i] => phi[i] for i in eachindex(phase_space_vars))
-    length_phi_config = length(phase_space_vars):(length(phase_space_vars)+length(configuration_space_vars))
-    configuration_dict = Dict(var => phi[i] for var in configuration_space_vars for i in length_phi_config)
-    phi_dict = [phase_space_dict, configuration_dict]
-    
 
-    return PlasmaSolution(plasma, phi, phi_dict, res, initθ, domains)
+    return PlasmaSolution(plasma, vars, dict_vars, phi, res, initθ, domains)
 end
 
 """
