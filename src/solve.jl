@@ -92,7 +92,7 @@ function solve(plasma::CollisionlessPlasma;
     # set up variables # TODO turn this into a separate function
     bcs = [bcs_;ints_]
     vars_arg = [_fs...; _Is...; _Ivs...; _Es...; _Bs...]
-    vars = [fs; Is; Ivs; Bs; Es]
+    vars = [fs, Is, Ivs, Bs, Es]
     
     dict_vars = Dict()
     for var in vars
@@ -211,7 +211,7 @@ function solve(plasma::ElectrostaticPlasma;
     # set up variables # TODO turn this into a separate function
     bcs = [bcs_;ints_]
     vars_arg = [_fs; _Is; _Es]
-    vars = [fs; Is; Es]
+    vars = [fs, Is, Es]
     
     dict_vars = Dict()
     for var in vars
@@ -233,12 +233,13 @@ function solve(plasma::ElectrostaticPlasma;
     # solve
     opt = Optim.BFGS()
     res = GalacticOptim.solve(prob, opt, cb = print_loss(prob), maxiters=2)
+    #=
     prob = remake(prob, u0=res.minimizer)
     res = GalacticOptim.solve(prob, ADAM(0.01), cb = print_loss(prob), maxiters=10000)
     prob = remake(prob, u0=res.minimizer)
     res = GalacticOptim.solve(prob, opt, cb = print_loss(prob), maxiters=200)
+    =#
     phi = discretization.phi
-
 
     return PlasmaSolution(plasma, vars, dict_vars, phi, res, initθ, domains)
 end

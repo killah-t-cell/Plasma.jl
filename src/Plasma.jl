@@ -46,7 +46,7 @@ struct ElectrostaticPlasma{ G <: AbstractGeometry } <: AbstractPlasma
     distributions::Vector{Distribution}
     geometry::G
 end
-struct PlasmaSolution{ P <: AbstractPlasma, V, DV, PHI, PHID, RE, IN, DO }
+struct PlasmaSolution{ P <: AbstractPlasma, V, DV, PHI, RE, IN, DO }
     plasma::P
     vars::V
     dict_vars::DV
