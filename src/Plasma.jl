@@ -8,7 +8,6 @@ using GLMakie
 using NeuralPDE
 using LinearAlgebra
 using DomainSets
-using Parameters
 import ModelingToolkit: Interval, infimum, supremum
 
 abstract type AbstractPlasma end
