@@ -12,7 +12,7 @@ G = Geometry()
 
 plasma = ElectrostaticPlasma([D_D, D_e], G)
 
-sol = Plasma.solve(plasma, dim=1, GPU=false) 
+sol = Plasma.solve(plasma, dim=2, GPU=false) 
 
 Plasma.plot(sol)
 
@@ -23,19 +23,19 @@ Tα = 70000 # eV
 
 α = Species(1.602176634e-19, 6.6446562e-27)
 
-function Kappa(T, m) 
-    P(x,v) = sqrt(sum(v .^2)) * x + m / exp(T)
+function HotCarrier(T) 
+    Kb = 8.617333262145e-5
+    P(x,v) = exp(-v/(Kb*T))
 end
 
-Dα = Distribution(Kappa(Tα, α.m), α)
+Dα = Distribution(HotCarrier(Tα), α)
 G = Geometry() # TODO define a custom geometry
 
 plasma = ElectrostaticPlasma([Dα], G)
 
 Plasma.solve(plasma, dim=2) # with GPU
 
-plot(sol)
-# TODO check the value of n and T and other plasma parameter at point T
+Plasma.plot(sol)
 
 
 ## 3D CollisionlessPlasma
@@ -58,19 +58,4 @@ plasma = CollisionlessPlasma([De,DT,DD], G)
 
 Plasma.solve(plasma)
 
-plot(sol)
-
-
-using Plasma
-
-D = species.D
-e = species.e
-
-D_D = Distribution(Maxwellian(3e5, D.m), D) 
-D_e = Distribution(Maxwellian(1.2e5, e.m), e) 
-G = Geometry()
-
-plasma = ElectrostaticPlasma([D_D, D_e], G)
-
-sol = Plasma.solve(plasma) 
-plot(sol)
+Plasma.plot(sol)
