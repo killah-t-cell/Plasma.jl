@@ -24,6 +24,7 @@ julia> Pkg.add("Plasma")
 - An interface to define the geometry of a plasma (WIP).
 - Plotting functions for easy analysis of results.
 - Validation methods to evaluate error in models (WIP).
+- Distributed GPU support (WIP).
 
 **This package is still a work in progress!** Some of these features might still have bugs. So feel free to create an issue and we'll try to help you out.
 
