@@ -1,12 +1,12 @@
 # Plasma.jl
 
-Plasma.jl is an interface for high-performance simulation of 7D collisionless and electrostatic kinetic plasmas. It solves the full Vlasov and Vlasov-Poisson equations to model plasma evolution with high accuracy.
+Plasma.jl is an interface for high-performance simulation of 7D collisionless and electrostatic kinetic plasmas. It solves the full [Vlasov and Vlasov-Poisson equations](https://en.wikipedia.org/wiki/Vlasov_equation) to model plasma evolution with high accuracy.
 
 -Graph-
 
-Knowledge of how plasmas move is essential to solve controlled fusion and understand important astrophysical objects. Knowing how a plasma moves – however – is not trivial. It requires one to know the approximate position and velocity of particles at every point in time. This means the Vlasov equations are generally high dimensional – they must be solved in both velocity and configuration space. Unfortunately, the curse of dimensionality makes solving such 7D equations with standard algorithms infesible with modern technology.
+Knowledge of how plasmas move is essential to solve controlled fusion and understand important astrophysical objects. Knowing this is, however, not trivial. It requires one to know the approximate position and velocity of particles at every point in time. This means the Vlasov equations are generally high dimensional – they must be solved in both velocity and configuration space. Unfortunately, the curse of dimensionality makes solving such 7D equations with standard algorithms infesible with modern technology.
 
-Plasma.jl avoids this by instead using a physics-informed neural network (PINN) architecture to approximate the movement of plasmas. Thereby greatly reducing the cost of computing high-dimensional plasmas.
+Plasma.jl handles this by instead using a [Physics-informed Neural Network (PINN](https://arxiv.org/abs/2107.09443) architecture to approximate the plasma evolution. Thereby greatly reducing the cost of computing high-dimensional plasmas.
 
 ## Installation
 
@@ -22,9 +22,10 @@ julia> Pkg.add("Plasma")
 - Vlasov-Maxwell and Vlasov-Poisson solvers.
 - An interface for the definition of plasmas with arbitrary dimensions, species, and initial distributions.
 - An interface to define the geometry of a plasma (WIP).
-- Plotting functions for easy analysis of results (WIP).
+- Plotting functions for easy analysis of results.
+- Validation methods to evaluate error in models (WIP).
 
-This package is still a work in progress! Some of these features might still have bugs. So feel free to create an issue and we'll try to help you out.
+**This package is still a work in progress!** Some of these features might still have bugs. So feel free to create an issue and we'll try to help you out.
 
 ## Example: Solving 3D Electrostatic D-D Plasma
 
