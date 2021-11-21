@@ -1,4 +1,9 @@
 # TODO add Kappa and other relevant distributions
+
+"""
+Temperature in eV
+mass in Kg
+"""
 function Maxwellian(T, m; v_drift=zeros())
         Kb = 8.617333262145e-5
         v_th = sqrt(2*Kb*T/m)

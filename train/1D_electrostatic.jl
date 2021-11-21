@@ -23,7 +23,7 @@ n_0 = 1
 v_th = sqrt(2)
 
 # Integrals
-Iv = Integral(v in DomainSets.ClosedInterval(-Inf, Inf)) 
+Iv = Integral(v in DomainSets.ClosedInterval(-1, 1)) 
 
 eqs = [Dt(f(t,x,v)) ~ - v * Dx(f(t,x,v)) - e/m_e * E(t,x) * Dv(f(t,x,v))
        Dx(E(t,x)) ~ e*n_0/ε_0 * (Iv(f(t,x,v)) - 1)]

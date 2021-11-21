@@ -3,7 +3,7 @@ Solve dispatch for collisionless plasmas
 """
 function solve(plasma::CollisionlessPlasma; 
                lb=0.0, ub=1.0, time_lb=lb, time_ub=ub, 
-               GPU=true, inner_layers=16)
+               GPU=true, inner_layers=16, strategy=QuadratureTraining())
     if lb > ub
         error("lower bound must be larger than upper bound")
     end
@@ -108,7 +108,7 @@ function solve(plasma::CollisionlessPlasma;
     xs_chains = [FastChain(FastDense(length([t, xs...]), il, Flux.σ), FastDense(il,il,Flux.σ), FastDense(il, 1)) for _ in 1:length([_Es; _Bs])]
     chain = [ps_chains;xs_chains]
     initθ = GPU ? map(c -> CuArray(Float64.(c)), DiffEqFlux.initial_params.(chain)) : map(c -> Float64.(c), DiffEqFlux.initial_params.(chain)) 
-    discretization = NeuralPDE.PhysicsInformedNN(chain, QuadratureTraining(), init_params=initθ)
+    discretization = NeuralPDE.PhysicsInformedNN(chain, strategy, init_params=initθ)
     prob = SciMLBase.discretize(pde_system, discretization)
     
     # solve
@@ -129,7 +129,7 @@ Solve dispatch for electrostatic plasmas
 """
 function solve(plasma::ElectrostaticPlasma; 
     lb=0.0, ub=1.0, time_lb=lb, time_ub=ub, 
-    dim=3, GPU=true, inner_layers=16)
+    dim=3, GPU=true, inner_layers=16, strategy=QuadratureTraining())
     if lb > ub
         error("lower bound must be larger than upper bound")
     end
@@ -227,7 +227,7 @@ function solve(plasma::ElectrostaticPlasma;
     xs_chains = [FastChain(FastDense(length([t, xs...]), il, Flux.σ), FastDense(il,il,Flux.σ), FastDense(il, 1)) for _ in 1:length(_Es)]
     chain = [ps_chains;xs_chains]
     initθ = GPU ? map(c -> CuArray(Float64.(c)), DiffEqFlux.initial_params.(chain)) : map(c -> Float64.(c), DiffEqFlux.initial_params.(chain)) 
-    discretization = NeuralPDE.PhysicsInformedNN(chain, QuadratureTraining(), init_params=initθ)
+    discretization = NeuralPDE.PhysicsInformedNN(chain, strategy, init_params=initθ)
     prob = SciMLBase.discretize(pde_system, discretization)
     
     # solve
