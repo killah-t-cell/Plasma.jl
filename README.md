@@ -1,12 +1,12 @@
 # Plasma.jl
 
-Plasma.jl is an interface for high-performance simulation of 7D collisionless and electrostatic kinetic plasmas. It solves the full [Vlasov and Vlasov-Poisson equations](https://en.wikipedia.org/wiki/Vlasov_equation) to model plasma evolution with high accuracy.
+Plasma.jl is an interface for high-performance simulation of 7D collisionless and electrostatic kinetic plasmas. It solves the full [Vlasov-Maxwell and Vlasov-Poisson equations](https://en.wikipedia.org/wiki/Vlasov_equation) to model plasma evolution with high accuracy.
 
 -Graph-
 
-Knowledge of how plasmas move is essential to solve controlled fusion and understand important astrophysical objects. Knowing this is, however, not trivial. It requires one to know the approximate position and velocity of particles at every point in time. This means the Vlasov equations are generally high dimensional – they must be solved in both velocity and configuration space. Unfortunately, the curse of dimensionality makes solving such 7D equations with standard algorithms infesible with modern technology.
+Knowledge of how plasmas move is essential to solving controlled nuclear fusion and understanding important astrophysical objects. However, to know how a plasma moves one must know the approximate position and velocity of particles at every point in time. This is not trivial. For our 3D world, the Vlasov equations must be solved in 6D – three velocity and three space dimensions. Its non-linearity and high dimensionality makes it infesible to solve such equations with standard algorithms.
 
-Plasma.jl handles this by instead using a [Physics-informed Neural Network (PINN](https://arxiv.org/abs/2107.09443) architecture to approximate the plasma evolution. Thereby greatly reducing the cost of computing high-dimensional plasmas.
+Plasma.jl handles this by instead using a [Physics-informed Neural Network (PINN)](https://arxiv.org/abs/2107.09443) architecture to approximate the plasma evolution. Thereby greatly reducing the cost of computing high-dimensional plasmas.
 
 ## Installation
 
