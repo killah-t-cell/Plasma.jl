@@ -69,8 +69,6 @@ function solve(plasma::CollisionlessPlasma;
     xs,vs = Symbolics.variables(:x, 1:dim), Symbolics.variables(:v, 1:dim)
 
     # integrals
-    Ivs = Symbolics.variables(:Iv, eachindex(fs), 1:dim ; T=SymbolicUtils.FnType{Tuple,Real})
-    Is = Symbolics.variables(:I, eachindex(fs); T=SymbolicUtils.FnType{Tuple,Real})
     _I = Integral(tuple(vs...) in DomainSets.ProductDomain(ClosedInterval(-Inf ,Inf), ClosedInterval(-Inf ,Inf), ClosedInterval(-Inf ,Inf)))    
 
     # differentials
@@ -89,8 +87,6 @@ function solve(plasma::CollisionlessPlasma;
     _Es = [E(t,xs...) for E in Es]
     _Bs = [B(t,xs...) for B in Bs]
     _fs = [f(t,xs...,vs...) for f in fs]
-    _Is = [I(t,xs...,vs...) for I in Is]
-    _Ivs = [Iv(t,xs...,vs...) for Iv in Ivs]
 
     # divergences
     div_vs = [divergence(Dxs, _f, vs) for _f in _fs]
@@ -100,8 +96,8 @@ function solve(plasma::CollisionlessPlasma;
     divv_Fs = [divergence(Dvs, _fs[i], Fs[i]) for i in eachindex(_fs)]
 
     # charge and current densities
-    ρ = sum([qs[i] * _Is[i] for i in eachindex(qs)])
-    J = [sum(qs[i] * _Ivs[i, j] for i in eachindex(qs)) for j in 1:length(eachcol(_Ivs))] 
+    ρ = sum([qs[i] * _I(_fs[i]) for i in eachindex(qs)])
+    J = sum([qs[i] * _I(_fs[i]) * vs[j] for i in 1:length(_fs), j in 1:length(vs)]) 
 
     # system of equations
     vlasov_eqs = Dt.(_fs) .~ .- div_vs .- divv_Fs
@@ -114,20 +110,12 @@ function solve(plasma::CollisionlessPlasma;
     # boundary and initial conditions
     vlasov_ics = [fs[i](0,xs...,vs...) ~ Ps[i](xs,vs) * geometry(xs) for i in eachindex(fs)]
     div_B_ic = div_B ~ 0
-    div_E_ic = div_E ~ sum([qs[i] * Is[i](0,xs...,vs...) for i in eachindex(qs)])/ϵ_0 * geometry(xs)
+    div_E_ic = div_E ~ sum([qs[i] * _I(fs[i](0,xs...,vs...)) for i in eachindex(qs)])/ϵ_0 * geometry(xs)
     
-    bcs_ = [vlasov_ics; div_B_ic; div_E_ic]
+    bcs = [vlasov_ics; div_B_ic; div_E_ic]
 
-    # neural integral
-    f_ints = _I.(_fs) .~ _Is 
-    vf_ints = [_I(_fs[i]) * vs[j] ~ _Ivs[i, j] for i in 1:length(eachrow(_Ivs)), j in 1:length(eachcol(_Ivs))] 
-
-    ints_ = [f_ints; vcat(vf_ints...)]
-
-    # set up variables # TODO turn this into a separate function
-    bcs = [bcs_;ints_]
-    vars_arg = [_fs...; _Is...; _Ivs...; _Es...; _Bs...]
-    vars = [fs, Is, Ivs, Bs, Es]
+    vars_arg = [_fs...; _Es...; _Bs...]
+    vars = [fs, Bs, Es]
     
     dict_vars = Dict()
     for var in vars
@@ -139,7 +127,7 @@ function solve(plasma::CollisionlessPlasma;
 
     # set up problem
     il = inner_layers
-    ps_chains = [FastChain(FastDense(length(domains), il, Flux.σ), FastDense(il,il,Flux.σ), FastDense(il, 1)) for _ in 1:length([_fs; _Is; vcat(_Ivs...)])]
+    ps_chains = [FastChain(FastDense(length(domains), il, Flux.σ), FastDense(il,il,Flux.σ), FastDense(il, 1)) for _ in 1:length(_fs)]
     xs_chains = [FastChain(FastDense(length([t, xs...]), il, Flux.σ), FastDense(il,il,Flux.σ), FastDense(il, 1)) for _ in 1:length([_Es; _Bs])]
     chain = [ps_chains;xs_chains]
     initθ = GPU ? map(c -> CuArray(Float64.(c)), DiffEqFlux.initial_params.(chain)) : map(c -> Float64.(c), DiffEqFlux.initial_params.(chain)) 
@@ -174,7 +162,7 @@ function solve(plasma::ElectrostaticPlasma;
     dis = plasma.distributions
     species = [d.species for d in dis]
     consts = Constants()
-    μ_0, ϵ_0 = consts.μ_0, consts.ϵ_0
+    ϵ_0 = consts.ϵ_0
 
     # get qs, ms, Ps from species
     qs, ms = [], []
@@ -193,8 +181,7 @@ function solve(plasma::ElectrostaticPlasma;
     xs,vs = Symbolics.variables(:x, 1:dim), Symbolics.variables(:v, 1:dim)
 
     # integrals
-    Is = Symbolics.variables(:I, eachindex(fs); T=SymbolicUtils.FnType{Tuple,Real})
-    if length(vs) > 1
+    _I = if length(vs) > 1
         intervals = [ClosedInterval(-Inf ,Inf) for _ in 1:length(vs)]
         _I = Integral(tuple(vs...) in DomainSets.ProductDomain(intervals...))
     else
@@ -217,7 +204,6 @@ function solve(plasma::ElectrostaticPlasma;
     # helpers
     _Es = [E(t,xs...) for E in Es]
     _fs = [f(t,xs...,vs...) for f in fs]
-    _Is = [I(t,xs...,vs...) for I in Is]
 
     # divergences
     div_vs = [divergence(Dxs, _f, vs) for _f in _fs]
@@ -226,7 +212,7 @@ function solve(plasma::ElectrostaticPlasma;
     divv_Fs = [divergence(Dvs, _fs[i], Fs[i]) for i in eachindex(_fs)]
 
     # charge density
-    ρ = sum([qs[i] * _Is[i] for i in eachindex(qs)])
+    ρ = sum([qs[i] * _I(_fs[i]) for i in eachindex(qs)])
 
     # equations
     vlasov_eqs = Dt.(_fs) .~ .- div_vs .- divv_Fs
@@ -235,18 +221,14 @@ function solve(plasma::ElectrostaticPlasma;
 
     # boundary and initial conditions
     vlasov_ics = [fs[i](0,xs...,vs...) ~ Ps[i](xs,vs) * geometry(xs) for i in eachindex(fs)]
-    div_E_ic = div_E ~ sum([qs[i] * Is[i](0,xs...,vs...) for i in eachindex(qs)])/ϵ_0 * geometry(xs) 
+    div_E_ic = div_E ~ sum([qs[i] * _I(fs[i](0,xs...,vs...)) for i in eachindex(qs)])/ϵ_0 * geometry(xs) 
     # TODO does E need boundary conditions?
 
-    bcs_ = [vlasov_ics; div_E_ic]
+    bcs = [vlasov_ics; div_E_ic]
 
-    # neural integral
-    ints_ = _I.(_fs) .~ _Is 
-
-    # set up variables # TODO turn this into a separate function
-    bcs = [bcs_;ints_]
-    vars_arg = [_fs; _Is; _Es]
-    vars = [fs, Is, Es]
+    # set up variables
+    vars_arg = [_fs; _Es]
+    vars = [fs, Es]
     
     dict_vars = Dict()
     for var in vars
@@ -258,7 +240,7 @@ function solve(plasma::ElectrostaticPlasma;
 
     # set up problem
     il = inner_layers
-    ps_chains = [FastChain(FastDense(length(domains), il, Flux.σ), FastDense(il,il,Flux.σ), FastDense(il, 1)) for _ in 1:length([_fs; _Is])]
+    ps_chains = [FastChain(FastDense(length(domains), il, Flux.σ), FastDense(il,il,Flux.σ), FastDense(il, 1)) for _ in 1:length(_fs)]
     xs_chains = [FastChain(FastDense(length([t, xs...]), il, Flux.σ), FastDense(il,il,Flux.σ), FastDense(il, 1)) for _ in 1:length(_Es)]
     chain = [ps_chains;xs_chains]
     initθ = GPU ? map(c -> CuArray(Float64.(c)), DiffEqFlux.initial_params.(chain)) : map(c -> Float64.(c), DiffEqFlux.initial_params.(chain)) 
