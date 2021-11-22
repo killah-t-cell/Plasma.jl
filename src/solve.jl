@@ -1,4 +1,39 @@
 """
+Get the curl of a vector f w.r.t Ds
+"""
+function curl(vec, Ds)
+    [Ds[2](vec[3]) - Ds[3](vec[2]), Ds[3](vec[1]) - Ds[1](vec[3]), Ds[1](vec[2]) - Ds[2](vec[1])]
+end
+
+"""
+Get the divergence of a function f w.r.t Ds with the option of multiplying each part of the sum by a v
+"""
+function divergence(Ds, f, v=ones(length(Ds)))
+    if f isa AbstractArray
+        sum([v[i] * Ds[i](f[i]) for i in eachindex(Ds)])
+    else
+        sum([v[i] * Ds[i](f) for i in eachindex(Ds)])
+    end
+end
+
+"""
+Print the loss of the loss function
+"""
+function print_loss(prob)
+    pde_inner_loss_functions = prob.f.f.loss_function.pde_loss_function.pde_loss_functions.contents
+    inner_loss_functions = prob.f.f.loss_function.bcs_loss_function.bc_loss_functions.contents
+
+    cb = function (p,l)
+        println("Current loss is: $l")
+        println("pde_losses: ", map(l_ -> l_(p), pde_inner_loss_functions))
+        println("bcs_losses: ", map(l_ -> l_(p), inner_loss_functions))
+        return false
+    end
+    
+    return cb
+end
+
+"""
 Solve dispatch for collisionless plasmas
 """
 function solve(plasma::CollisionlessPlasma; 
@@ -240,39 +275,4 @@ function solve(plasma::ElectrostaticPlasma;
     phi = discretization.phi
 
     return PlasmaSolution(plasma, vars, dict_vars, phi, res, initθ, domains)
-end
-
-"""
-Get the curl of a vector f w.r.t Ds
-"""
-function curl(vec, Ds)
-    [Ds[2](vec[3]) - Ds[3](vec[2]), Ds[3](vec[1]) - Ds[1](vec[3]), Ds[1](vec[2]) - Ds[2](vec[1])]
-end
-
-"""
-Get the divergence of a function f w.r.t Ds with the option of multiplying each part of the sum by a v
-"""
-function divergence(Ds, f, v=ones(length(Ds)))
-    if f isa AbstractArray
-        sum([v[i] * Ds[i](f[i]) for i in eachindex(Ds)])
-    else
-        sum([v[i] * Ds[i](f) for i in eachindex(Ds)])
-    end
-end
-
-"""
-Print the loss of the loss function
-"""
-function print_loss(prob)
-    pde_inner_loss_functions = prob.f.f.loss_function.pde_loss_function.pde_loss_functions.contents
-    inner_loss_functions = prob.f.f.loss_function.bcs_loss_function.bc_loss_functions.contents
-
-    cb = function (p,l)
-        println("Current loss is: $l")
-        println("pde_losses: ", map(l_ -> l_(p), pde_inner_loss_functions))
-        println("bcs_losses: ", map(l_ -> l_(p), inner_loss_functions))
-        return false
-    end
-    
-    return cb
 end
