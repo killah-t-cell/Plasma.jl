@@ -5,7 +5,7 @@ using GalacticOptim
 using DiffEqFlux
 using DomainSets
 import ModelingToolkit: Interval, infimum, supremum
-using Plots
+# using Plots
 using CUDA
 
 @parameters t x v
@@ -52,7 +52,7 @@ end
 
 # Solve
 opt = Optim.BFGS()
-res = GalacticOptim.solve(prob, opt, cb = cb, maxiters=5)
+res = GalacticOptim.solve(prob, opt, cb = cb, maxiters=100)
 phi = discretization.phi
 
 # Plot
