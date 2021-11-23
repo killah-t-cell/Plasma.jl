@@ -69,7 +69,7 @@ function solve(plasma::CollisionlessPlasma;
     xs,vs = Symbolics.variables(:x, 1:dim), Symbolics.variables(:v, 1:dim)
 
     # integrals
-    _I = Integral(tuple(vs...) in DomainSets.ProductDomain(ClosedInterval(-Inf ,Inf), ClosedInterval(-Inf ,Inf), ClosedInterval(-Inf ,Inf)))    
+    _I = Integral(tuple(vs...) in DomainSets.ProductDomain(ClosedInterval(-1 ,1), ClosedInterval(-1 ,1), ClosedInterval(-1 ,1))) # TODO change back to Inf,-Inf
 
     # differentials
     Dxs = Differential.(xs)
@@ -182,10 +182,10 @@ function solve(plasma::ElectrostaticPlasma;
 
     # integrals
     _I = if length(vs) > 1
-        intervals = [ClosedInterval(-Inf ,Inf) for _ in 1:length(vs)]
+        intervals = [ClosedInterval(-1 ,1) for _ in 1:length(vs)] # TODO change back to Inf,-Inf
         _I = Integral(tuple(vs...) in DomainSets.ProductDomain(intervals...))
     else
-        _I = Integral(first(vs) in DomainSets.ClosedInterval(-Inf ,Inf))
+        _I = Integral(first(vs) in DomainSets.ClosedInterval(-1 ,1)) # TODO change back to Inf,-Inf
     end
 
     # differentials
