@@ -4,7 +4,7 @@ Plasma.jl is an interface for high-performance simulation of 7D collisionless an
 
 -Graph-
 
-Knowledge of how plasmas move is essential to solving controlled nuclear fusion and understanding important astrophysical objects. However, to know how a plasma moves one must know the approximate position and velocity of particles at every point in time. This is not trivial. For our 3D world, the Vlasov equations must be solved in 6D – three velocity and three space dimensions. Its non-linearity and high dimensionality makes it infesible to solve such equations with standard algorithms.
+Knowledge of how plasmas move is essential to solving controlled nuclear fusion and understanding important astrophysical systems. To know how a plasma moves one must know the approximate position and velocity of particles at every point in time. This is not trivial. In fact, the Vlasov equations non-linearity and high dimensionality makes it infesible to solve such equations with standard algorithms.
 
 Plasma.jl handles this by instead using a [Physics-informed Neural Network (PINN)](https://arxiv.org/abs/2107.09443) architecture to approximate the plasma evolution. Thereby greatly reducing the cost of computing high-dimensional plasmas.
 
@@ -26,7 +26,7 @@ julia> Pkg.add("Plasma")
 - Validation methods to evaluate error in models (WIP).
 - Distributed GPU support (WIP).
 
-**This package is still a work in progress!** Some of these features might still have bugs. So feel free to create an issue and we'll try to help you out.
+**Parts of this package are still work in progress.** Some of these features might still have bugs. So feel free to create an issue and we'll try to help you out.
 
 ## Example: Solving 3D Electrostatic D-D Plasma
 
@@ -49,8 +49,6 @@ sol = Plasma.solve(plasma, dim=2, GPU=false)
 
 Plasma.plot(sol)
 ```
-
--Graph-
 
 ## Example: Solving 5D Electrostatic α Plasma with a Custom Initial Distribution
 
@@ -77,8 +75,6 @@ Plasma.solve(plasma, dim=2) # with GPU
 Plasma.plot(sol)
 ```
 
--Graph-
-
 ## Example: Solving 7D Collisionless D-T Plasma
 
 ```julia
@@ -104,5 +100,3 @@ Plasma.solve(plasma)
 
 Plasma.plot(sol)
 ```
-
--Graph-
