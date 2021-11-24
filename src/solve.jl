@@ -43,6 +43,10 @@ function solve(plasma::CollisionlessPlasma;
         error("lower bound must be larger than upper bound")
     end
 
+    if GPU && strategy == QuadratureTraining()
+        error("QuadratureTraining does not have GPU support. Use another strategy (e.g. StochasticTraining(200)) instead")
+    end
+
     # constants
     dim = 3
     geometry = plasma.geometry.f # this might change with a geometry refactor
@@ -155,6 +159,10 @@ function solve(plasma::ElectrostaticPlasma;
     dim=3, GPU=true, inner_layers=16, strategy=QuadratureTraining())
     if lb > ub
         error("lower bound must be larger than upper bound")
+    end
+
+    if GPU && strategy == QuadratureTraining()
+        error("QuadratureTraining does not have GPU support. Use another strategy (e.g. StochasticTraining(200)) instead")
     end
 
     # constants
