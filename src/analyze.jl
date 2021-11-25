@@ -33,6 +33,10 @@ function get_predicts(sol, dx)
     return predicts
 end
 
+
+"""
+Plots a plasma given a PlasmaSolution object
+"""
 function Plasma.plot(sol::PlasmaSolution, dx=0.1)
     predicts = get_predicts(sol, dx)
 
