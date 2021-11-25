@@ -69,7 +69,7 @@ function HotCarrier(T)
 end
 
 Dα = Distribution(HotCarrier(Tα), α)
-G = Geometry() # TODO define a custom geometry
+G = Geometry()
 
 plasma = ElectrostaticPlasma([Dα], G)
 
