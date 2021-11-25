@@ -17,6 +17,15 @@ abstract type AbstractGeometry end
 abstract type AbstractDistribution end
 
 abstract type AbstractCoil end
+
+"""
+Species holds
+
+q – charge in C
+m – mass in Kg
+
+to describe a particle species
+"""
 struct Species{ T <: Number }
     q::T # charge in C
     m::T # mass in Kg
@@ -27,10 +36,28 @@ struct Species{ T <: Number }
         )
     end
 end
+
+"""
+Velocity distribution of particles
+
+P – probability function
+species – which species of particle
+"""
 struct Distribution <: AbstractDistribution
     P::Function
     species::Species
 end
+
+
+"""
+Describes the initial geometry of a plasma
+
+f – conditional function
+
+# Example
+
+Geometry(x -> x > 0.4 ? 1. : 0)
+"""
 struct Geometry{F <: Function} <: AbstractGeometry
     f::F
 
@@ -38,14 +65,40 @@ struct Geometry{F <: Function} <: AbstractGeometry
         new{typeof(f)}(f)
     end
 end
+
+"""
+CollisionlessPlasma object that can be passed to Plasma.solve for simulation
+
+It takes a geometry and a vector of distributions (one for every particle).
+"""
 struct CollisionlessPlasma{ G <: AbstractGeometry } <: AbstractPlasma
     distributions::Vector{Distribution}
     geometry::G
 end
+
+"""
+ElectrostaticPlasma object that can be passed to Plasma.solve for simulation
+
+It takes a geometry and a vector of distributions (one for every particle).
+"""
 struct ElectrostaticPlasma{ G <: AbstractGeometry } <: AbstractPlasma
     distributions::Vector{Distribution}
     geometry::G
 end
+
+"""
+Object to hold (and save) the results of Plasma.solve.
+
+It consists of
+
+plasma – CollisionlessPlasma or ElectrostaticPlasma object
+vars – dependent variables
+dict_vars – dictionary of dependent variables
+phi – trained trial solution that approximates plasma movement
+res – result of optimization
+initθ – weights of the neural network
+domains – domains of the simulation
+"""
 struct PlasmaSolution{ P <: AbstractPlasma, V, DV, PHI, RE, IN, DO }
     plasma::P
     vars::V

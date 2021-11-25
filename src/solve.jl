@@ -34,7 +34,16 @@ function print_loss(prob)
 end
 
 """
-Solve dispatch for collisionless plasmas
+Simulates a collisionless plasma given:
+
+plasma – Struct of type CollisionlessPlasma
+lb – lower bound
+ub – upper bound
+time_lb – lower time boundary
+time_ub – upper time boundary
+GPU – whether this should be executed on the GPU or not
+inner_layers – how many layers in the neural network
+strategy – what NeuralPDE training strategy should be used
 """
 function solve(plasma::CollisionlessPlasma; 
                lb=0.0, ub=1.0, time_lb=lb, time_ub=ub, 
@@ -152,7 +161,17 @@ function solve(plasma::CollisionlessPlasma;
 end
 
 """
-Solve dispatch for electrostatic plasmas
+Simulates an electrostatic plasma given:
+
+plasma – Struct of type ElectrostaticPlasma
+dim – in how many D and V dimensions should the simulation happen
+lb – lower bound
+ub – upper bound
+time_lb – lower time boundary
+time_ub – upper time boundary
+GPU – whether this should be executed on the GPU or not
+inner_layers – how many layers in the neural network
+strategy – what NeuralPDE training strategy should be used
 """
 function solve(plasma::ElectrostaticPlasma; 
     lb=0.0, ub=1.0, time_lb=lb, time_ub=ub, 
