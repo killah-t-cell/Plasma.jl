@@ -5,6 +5,7 @@ using ModelingToolkit
 using GalacticOptim
 using DiffEqFlux
 using GLMakie
+using CUDA
 using NeuralPDE
 using LinearAlgebra
 using DomainSets
