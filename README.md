@@ -45,7 +45,7 @@ G = Geometry()
 
 plasma = ElectrostaticPlasma([D_D, D_e], G)
 
-sol = Plasma.solve(plasma, dim=2, GPU=false)
+sol = Plasma.solve(plasma, dim=1, GPU=false)
 
 Plasma.plot(sol)
 ```
