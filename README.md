@@ -4,6 +4,8 @@ Plasma.jl is an interface for high-performance simulation of 7D collisionless an
 
 -Graph-
 
+## Problem Domain
+
 Knowledge of how plasmas move is essential to solving controlled nuclear fusion and understanding important astrophysical systems. To know how a plasma moves one must know the approximate position and velocity of particles at every point in time. This is not trivial. In fact, the Vlasov equations non-linearity and high dimensionality makes it infesible to solve such equations with standard algorithms.
 
 Plasma.jl handles this by instead using a [Physics-informed Neural Network (PINN)](https://arxiv.org/abs/2107.09443) architecture to approximate plasma evolution. Thereby greatly reducing the cost of computing high-dimensional plasmas.
