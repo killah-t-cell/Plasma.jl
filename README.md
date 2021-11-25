@@ -2,8 +2,6 @@
 
 Plasma.jl is an interface for high-performance simulation of 7D collisionless and electrostatic kinetic plasmas. It solves the full [Vlasov-Maxwell and Vlasov-Poisson equations](https://en.wikipedia.org/wiki/Vlasov_equation) to model plasma evolution with high accuracy.
 
--Graph-
-
 ## Problem Domain
 
 Knowledge of how plasmas move is essential to solving controlled nuclear fusion and understanding important astrophysical systems. To know how a plasma moves one must know the approximate position and velocity of particles at every point in time. This is not trivial. In fact, the Vlasov equations non-linearity and high dimensionality makes it infesible to solve such equations with standard algorithms.
