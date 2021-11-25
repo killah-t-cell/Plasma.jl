@@ -60,9 +60,12 @@ Tα = 70000 # eV
 
 α = Species(1.602176634e-19, 6.6446562e-27)
 
-function HotCarrier(T)
+function HotCarrier(T) 
     Kb = 8.617333262145e-5
-    P(x,v) = exp(-v/(Kb*T))
+    function P(x,v)
+        v_ = sqrt(sum(v .^2))
+        exp(-v_/(Kb*T))
+    end
 end
 
 Dα = Distribution(HotCarrier(Tα), α)
@@ -70,7 +73,7 @@ G = Geometry() # TODO define a custom geometry
 
 plasma = ElectrostaticPlasma([Dα], G)
 
-Plasma.solve(plasma, dim=2) # with GPU
+sol = Plasma.solve(plasma, dim=2) # with GPU
 
 Plasma.plot(sol)
 ```
