@@ -1,13 +1,10 @@
-using Plasma
-using Test
+using Pkg
+using SafeTestsets
 
-@testset "Plasma.jl" begin
-    TD = 30000
-    D = species.D
-    D_D = Distribution(Maxwellian(TD, D.m), D) 
-    G = Geometry() 
-    plasma = ElectrostaticPlasma([D_D], G)
+const GROUP = get(ENV, "GROUP", "All")
 
-    sol = Plasma.solve(plasma, dim=1, GPU=false, ub=0.1) 
-    @test sol isa PlasmaSolution
+@time begin
+  if GROUP == "All" || GROUP == "plasmatests"
+      @time @safetestset "Plasma tests" begin include("plasmatests.jl") end
+  end
 end
