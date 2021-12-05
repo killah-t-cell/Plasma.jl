@@ -20,7 +20,7 @@ function Maxwellian(T, m; v_drift=zeros())
             if length(v) != length(v_drift)
                 error("v and v_drift should have the same length")
             end
-
+ 
             v_ = sqrt(sum(v .^2))
             v_drift_ = sqrt(sum(v_drift.^2))
 
