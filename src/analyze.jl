@@ -63,8 +63,8 @@ function plot_with_makie(var, predict, ts)
         data_1 = @lift(predict[$i, :, :, :, 1, 1, 1])
         data_2 = @lift(predict[$i, 1, 1, 1, :, :, :])
 
-        volume(f[1, 1], data_1, axis = (;type = Axis3))
-        volume(f[1, 2], data_2, axis = (;type = Axis3))
+        GLMakie.volume(f[1, 1], data_1, axis = (;type = Axis3))
+        GLMakie.volume(f[1, 2], data_2, axis = (;type = Axis3))
 
     elseif length(size(predict)) == 5
         data_1 = @lift(predict[$i, :, :, 1, 1])
@@ -75,7 +75,7 @@ function plot_with_makie(var, predict, ts)
 
     elseif length(size(predict)) == 4
         data_1 = @lift(predict[$i, :, :, :])
-        volume(f[1, 1], data_1, axis = (;type = Axis3))
+        GLMakie.volume(f[1, 1], data_1, axis = (;type = Axis3))
 
     elseif length(size(predict)) == 3
         data_1 = @lift(predict[$i, :, :])
@@ -90,7 +90,14 @@ function plot_with_makie(var, predict, ts)
     ls = labelslider!(f, "t", ts)
     
     f[2, multigraph] = ls.layout
-    connect!(i, ls.slider.value)
+    connect!(i, ls.slider.value) 
 
     GLMakie.save("$var.png", f)
+
+    GLMakie.record(f, "time_animation.mp4", ts;
+        framerate = 10) do t
+        i[] = t
+    end
+
+    display(f)
 end
