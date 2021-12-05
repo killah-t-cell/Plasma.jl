@@ -100,7 +100,7 @@ res – result of optimization
 initθ – weights of the neural network
 domains – domains of the simulation
 """
-struct PlasmaSolution{ P <: AbstractPlasma, V, DV, PHI, RE, IN, DO }
+struct PlasmaSolution{ P <: AbstractPlasma, V, DV, PHI, RE, IN, DO, LO, TI }
     plasma::P
     vars::V
     dict_vars::DV
@@ -108,6 +108,8 @@ struct PlasmaSolution{ P <: AbstractPlasma, V, DV, PHI, RE, IN, DO }
     res::RE
     initθ::IN
     domains::DO
+    losses::LO
+    times::TI
 end
 struct Constants{ T <: Number}
     μ_0::T
