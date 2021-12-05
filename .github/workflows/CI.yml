@@ -12,6 +12,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        group:
+          - plasmatests
         version:
           - "1.6"
         os:
