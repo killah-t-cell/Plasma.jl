@@ -103,3 +103,8 @@ Plasma.solve(plasma)
 
 Plasma.plot(sol)
 ```
+
+## Benchmarks
+
+See [PlasmaBenchmarks.jl](https://github.com/killah-t-cell/PlasmaBenchmarks.jl) for solved examples and benchmarks against PIC methods w.r.t. performance and accuracy.
+
