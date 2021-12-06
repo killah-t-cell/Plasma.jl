@@ -20,6 +20,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        group:
+          - plasmatests
         version:
           - "1.6"
         os:
