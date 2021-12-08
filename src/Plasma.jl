@@ -17,6 +17,8 @@ abstract type AbstractGeometry end
 
 abstract type AbstractDistribution end
 
+abstract type AbstractCondition end
+
 abstract type AbstractCoil end
 
 """
@@ -49,6 +51,9 @@ struct Distribution <: AbstractDistribution
     species::Species
 end
 
+struct Condition <: AbstractDistribution
+
+end
 
 """
 Describes the initial geometry of a plasma
@@ -75,6 +80,8 @@ It takes a geometry and a vector of distributions (one for every particle).
 struct CollisionlessPlasma{ G <: AbstractGeometry } <: AbstractPlasma
     distributions::Vector{Distribution}
     geometry::G
+    ics::Vector{Condition}
+    bcs::Vector{Condition}
 end
 
 """
@@ -85,6 +92,8 @@ It takes a geometry and a vector of distributions (one for every particle).
 struct ElectrostaticPlasma{ G <: AbstractGeometry } <: AbstractPlasma
     distributions::Vector{Distribution}
     geometry::G
+    ics::Vector{Condition}
+    bcs::Vector{Condition}
 end
 
 """

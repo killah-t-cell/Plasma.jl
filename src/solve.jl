@@ -120,10 +120,16 @@ function solve(plasma::CollisionlessPlasma;
     div_B_eq = div_B ~ 0
     eqs = [vlasov_eqs; curl_E_eqs; curl_B_eqs; div_E_eq; div_B_eq]
 
-    # boundary and initial conditions
+    # initial conditions
     vlasov_ics = [fs[i](time_lb,xs...,vs...) ~ Ps[i](xs,vs) * geometry(xs) for i in eachindex(fs)]
     div_B_ic = div_B ~ 0
     div_E_ic = div_E ~ sum([qs[i] * _I(fs[i](time_lb,xs...,vs...)) for i in eachindex(qs)])/ϵ_0 * geometry(xs)
+    ic_E_ = [E(time_lb,xs...) ~ ic_E for E in Es]
+    ic_B_ = 
+
+    # boundary conditions
+    bc_E = 
+    bc_B = 
     
     bcs = [vlasov_ics; div_B_ic; div_E_ic]
 
