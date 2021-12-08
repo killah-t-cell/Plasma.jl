@@ -20,15 +20,17 @@ end
 Print the loss of the loss function
 """
 
-function print_loss(p, l)
+function print_loss(timeCounter, startTime, times, losses)
     deltaT_s = time_ns() #Start a clock when the callback begins
     timeCounter = timeCounter + time_ns() - deltaT_s
     ctime = time_ns() - startTime - timeCounter #This variable is the time to use for the time benchmark plot
     append!(times, ctime/10^9) #Conversion nanosec to seconds
-    append!(losses, l)
 
-    println("Current loss is: $l")
-    return false
+    function cb(p, l)
+        append!(losses, l)
+        println("Current loss is: $l")
+        return false
+    end
 end
 
 """
@@ -45,7 +47,7 @@ strategy – what NeuralPDE training strategy should be used
 """
 function solve(plasma::CollisionlessPlasma; 
                lb=0.0, ub=1.0, time_lb=lb, time_ub=ub, 
-               GPU=true, inner_layers=16, strategy=QuadratureTraining(), cb=print_loss)
+               GPU=true, inner_layers=16, strategy=QuadratureTraining())
     if lb > ub
         error("lower bound must be larger than upper bound")
     end
@@ -152,11 +154,11 @@ function solve(plasma::CollisionlessPlasma;
     
     # solve
     opt = Optim.BFGS()
-    res = GalacticOptim.solve(prob, opt, cb = print_loss, maxiters=200)
+    res = GalacticOptim.solve(prob, opt, cb = print_loss(timeCounter, startTime, times, losses), maxiters=200)
     prob = remake(prob, u0=res.minimizer)
-    res = GalacticOptim.solve(prob, ADAM(0.01), cb = print_loss, maxiters=10000)
+    res = GalacticOptim.solve(prob, ADAM(0.01), cb = print_loss(timeCounter, startTime, times, losses), maxiters=10000)
     prob = remake(prob, u0=res.minimizer)
-    res = GalacticOptim.solve(prob, opt, cb = print_loss, maxiters=200)
+    res = GalacticOptim.solve(prob, opt, cb = print_loss(timeCounter, startTime, times, losses), maxiters=200)
     phi = discretization.phi
 
 
@@ -178,7 +180,7 @@ strategy – what NeuralPDE training strategy should be used
 """
 function solve(plasma::ElectrostaticPlasma; 
     lb=0.0, ub=1.0, time_lb=lb, time_ub=ub, 
-    dim=3, GPU=true, inner_layers=16, strategy=QuadratureTraining(), cb = print_loss)
+    dim=3, GPU=true, inner_layers=16, strategy=QuadratureTraining())
     if lb > ub
         error("lower bound must be larger than upper bound")
     end
@@ -284,11 +286,11 @@ function solve(plasma::ElectrostaticPlasma;
     
     # solve
     opt = Optim.BFGS()
-    res = GalacticOptim.solve(prob, opt, cb = print_loss, maxiters=200)
+    res = GalacticOptim.solve(prob, opt, cb = print_loss(timeCounter, startTime, times, losses), maxiters=200)
     prob = remake(prob, u0=res.minimizer)
-    res = GalacticOptim.solve(prob, ADAM(0.01), cb = print_loss, maxiters=10000)
+    res = GalacticOptim.solve(prob, ADAM(0.01), cb = print_loss(timeCounter, startTime, times, losses), maxiters=10000)
     prob = remake(prob, u0=res.minimizer)
-    res = GalacticOptim.solve(prob, opt, cb = print_loss, maxiters=200)
+    res = GalacticOptim.solve(prob, opt, cb = print_loss(timeCounter, startTime, times, losses), maxiters=200)
     phi = discretization.phi
 
     return PlasmaSolution(plasma, vars, dict_vars, phi, res, initθ, domains, losses, times)
