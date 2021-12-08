@@ -56,6 +56,8 @@ function solve(plasma::CollisionlessPlasma;
 
     losses = []
     times = []
+    timeCounter = 0.0
+    startTime = time_ns()
 
     # constants
     dim = 3
@@ -187,6 +189,8 @@ function solve(plasma::ElectrostaticPlasma;
 
     losses = []
     times = []
+    timeCounter = 0.0
+    startTime = time_ns()
 
     # constants
     geometry = plasma.geometry.f # this might change with a geometry refactor
