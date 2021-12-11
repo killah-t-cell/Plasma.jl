@@ -247,10 +247,10 @@ function solve(plasma::ElectrostaticPlasma;
 
     # integrals
     _I = if length(vs) > 1
-        intervals = [ClosedInterval(-Inf ,Inf) for _ in 1:length(vs)] # TODO change back to Inf,-Inf
+        intervals = [ClosedInterval(-Inf ,Inf) for _ in 1:length(vs)]
         _I = Integral(tuple(vs...) in DomainSets.ProductDomain(intervals...))
     else
-        _I = Integral(first(vs) in DomainSets.ClosedInterval(-Inf ,Inf)) # TODO change back to Inf,-Inf
+        _I = Integral(first(vs) in DomainSets.ClosedInterval(-Inf ,Inf))
     end
 
     # differentials

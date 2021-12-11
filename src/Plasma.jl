@@ -17,8 +17,6 @@ abstract type AbstractGeometry end
 
 abstract type AbstractDistribution end
 
-abstract type AbstractCondition end
-
 abstract type AbstractCoil end
 
 """
@@ -49,10 +47,6 @@ species – which species of particle
 struct Distribution <: AbstractDistribution
     P::Function
     species::Species
-end
-
-struct Condition <: AbstractDistribution
-
 end
 
 """
