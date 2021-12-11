@@ -80,8 +80,6 @@ It takes a geometry and a vector of distributions (one for every particle).
 struct CollisionlessPlasma{ G <: AbstractGeometry } <: AbstractPlasma
     distributions::Vector{Distribution}
     geometry::G
-    ics::Vector{Condition}
-    bcs::Vector{Condition}
 end
 
 """
@@ -92,8 +90,6 @@ It takes a geometry and a vector of distributions (one for every particle).
 struct ElectrostaticPlasma{ G <: AbstractGeometry } <: AbstractPlasma
     distributions::Vector{Distribution}
     geometry::G
-    ics::Vector{Condition}
-    bcs::Vector{Condition}
 end
 
 """

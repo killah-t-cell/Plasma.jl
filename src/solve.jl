@@ -6,6 +6,40 @@ function curl(vec, Ds)
 end
 
 """
+Get plasma variables to generate custom boundary and initial conditions
+"""
+function get_vars(plasma; dim=3)
+    Es = Symbolics.variables(:E, 1:dim; T=SymbolicUtils.FnType{Tuple,Real})
+
+    @parameters t
+    xs,vs = Symbolics.variables(:x, 1:dim), Symbolics.variables(:v, 1:dim)
+
+    if plasma isa ElectrostaticPlasma
+        return Es, xs, vs, t
+    else 
+        Bs = Symbolics.variables(:B, 1:dim; T=SymbolicUtils.FnType{Tuple,Real})
+        return Es, Bs, xs, vs, t
+    end
+end
+
+"""
+Set boundary conditions
+"""
+function get_boundaries(t, xs, Fs, bc; bc_value = 0)
+    bcs = []
+    for F in Fs
+        for i in eachindex(xs)
+            temp = xs[i]
+            xs[i] = bc
+            push!(bcs,F(t, xs...) ~ bc_value)
+            xs[i] = temp
+        end    
+    end
+    
+    return bcs
+end
+
+"""
 Get the divergence of a function f w.r.t Ds with the option of multiplying each part of the sum by a v
 """
 function divergence(Ds, f, v=ones(length(Ds)))
@@ -47,7 +81,7 @@ strategy – what NeuralPDE training strategy should be used
 """
 function solve(plasma::CollisionlessPlasma; 
                lb=0.0, ub=1.0, time_lb=lb, time_ub=ub, 
-               GPU=true, inner_layers=16, strategy=QuadratureTraining())
+               GPU=true, inner_layers=16, strategy=QuadratureTraining(), conditions = [])
     if lb > ub
         error("lower bound must be larger than upper bound")
     end
@@ -121,17 +155,15 @@ function solve(plasma::CollisionlessPlasma;
     eqs = [vlasov_eqs; curl_E_eqs; curl_B_eqs; div_E_eq; div_B_eq]
 
     # initial conditions
-    vlasov_ics = [fs[i](time_lb,xs...,vs...) ~ Ps[i](xs,vs) * geometry(xs) for i in eachindex(fs)]
-    div_B_ic = div_B ~ 0
-    div_E_ic = div_E ~ sum([qs[i] * _I(fs[i](time_lb,xs...,vs...)) for i in eachindex(qs)])/ϵ_0 * geometry(xs)
-    ic_E_ = [E(time_lb,xs...) ~ ic_E for E in Es]
-    ic_B_ = 
+    div_E0 = sum([Dxs[i](Es[i](time_lb, xs...)) for i in eachindex(Dxs)])
+    div_B0 = sum([Dxs[i](Bs[i](time_lb, xs...)) for i in eachindex(Dxs)])
 
-    # boundary conditions
-    bc_E = 
-    bc_B = 
-    
-    bcs = [vlasov_ics; div_B_ic; div_E_ic]
+    vlasov_ics = [fs[i](time_lb,xs...,vs...) ~ Ps[i](xs,vs) * geometry(xs) for i in eachindex(fs)]
+    div_B_ic = div_B0 ~ 0
+    div_E_ic =  div_E0 ~ sum([qs[i] * _I(fs[i](time_lb,xs...,vs...)) for i in eachindex(qs)])/ϵ_0 * geometry(xs)
+    E_bcs = [get_boundaries(t, xs, Es, lb);get_boundaries(t, xs, Es, ub)]
+
+    bcs = [vlasov_ics;div_B_ic; div_E_ic; E_bcs; conditions]
 
     vars_arg = [_fs...; _Es...; _Bs...]
     vars = [fs, Bs, Es]
@@ -181,7 +213,7 @@ strategy – what NeuralPDE training strategy should be used
 """
 function solve(plasma::ElectrostaticPlasma; 
     lb=0.0, ub=1.0, time_lb=lb, time_ub=ub, 
-    dim=3, GPU=true, inner_layers=16, strategy=QuadratureTraining())
+    dim=3, GPU=true, inner_layers=16, strategy=QuadratureTraining(), conditions = [])
     if lb > ub
         error("lower bound must be larger than upper bound")
     end
@@ -253,11 +285,13 @@ function solve(plasma::ElectrostaticPlasma;
     eqs = [vlasov_eqs; div_E_eq]
 
     # boundary and initial conditions
-    vlasov_ics = [fs[i](time_lb,xs...,vs...) ~ Ps[i](xs,vs) * geometry(xs) for i in eachindex(fs)]
-    div_E_ic = div_E ~ sum([qs[i] * _I(fs[i](time_lb,xs...,vs...)) for i in eachindex(qs)])/ϵ_0 * geometry(xs) 
-    # TODO does E need boundary conditions?
+    div_E0 = sum([Dxs[i](Es[i](time_lb, xs...)) for i in eachindex(Dxs)])
 
-    bcs = [vlasov_ics; div_E_ic]
+    vlasov_ics = [fs[i](time_lb,xs...,vs...) ~ Ps[i](xs,vs) * geometry(xs) for i in eachindex(fs)]
+    div_E_ic = div_E0 ~ sum([qs[i] * _I(fs[i](time_lb,xs...,vs...)) for i in eachindex(qs)])/ϵ_0 * geometry(xs)
+    E_bcs = [get_boundaries(t, xs, Es, lb);get_boundaries(t, xs, Es, ub)]
+
+    bcs = [vlasov_ics; div_E_ic; E_bcs; conditions]
 
     # set up variables
     vars_arg = [_fs; _Es]

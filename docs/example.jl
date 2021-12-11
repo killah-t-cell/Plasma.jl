@@ -12,7 +12,12 @@ G = Geometry()
 
 plasma = ElectrostaticPlasma([D_D, D_e], G)
 
-sol = Plasma.solve(plasma, dim=1, GPU=false) 
+# example setting custom initial and boundary conditions
+Es, xs, vs, t = Plasma.get_vars(plasma; dim=1)
+ic = [Es[1](0, xs...) ~ cos(xs[1])]
+bc = [Es[1](t,0.4) ~ cos(t)]
+
+sol = Plasma.solve(plasma, dim=1, GPU=false, conditions = [ic;bc]) 
 
 Plasma.plot(sol)
 
