@@ -1,7 +1,7 @@
 name = "Plasma"
 uuid = "d4286570-51d5-4bbe-9c0b-035637fe1a6e"
 authors = ["Gabriel Birnbaum <gbbinbum@gmail.com> and contributors"]
-version = "0.1.0"
+version = "0.1.1"
 
 [deps]
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
