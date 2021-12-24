@@ -47,7 +47,9 @@ strategy – what NeuralPDE training strategy should be used
 """
 function solve(plasma::CollisionlessPlasma; 
                lb=0.0, ub=1.0, time_lb=lb, time_ub=ub, 
-               GPU=true, inner_layers=16, strategy=QuadratureTraining())
+               GPU=true, inner_layers=16, strategy=QuadratureTraining(),
+               E_bcs=Neumann, 
+               f_bcs=(a=1, g=0))
     if lb > ub
         error("lower bound must be larger than upper bound")
     end
@@ -70,7 +72,7 @@ function solve(plasma::CollisionlessPlasma;
     μ_0, ϵ_0 = consts.μ_0, consts.ϵ_0
     
     # get qs, ms, Ps from species
-    qs, ms = [], []
+    qs, ms = Float64[], Float64[]
     for s in species
         push!(qs,s.q)
         push!(ms,s.m)
@@ -87,7 +89,7 @@ function solve(plasma::CollisionlessPlasma;
     xs,vs = Symbolics.variables(:x, 1:dim), Symbolics.variables(:v, 1:dim)
 
     # integrals
-    _I = Integral(tuple(vs...) in DomainSets.ProductDomain(ClosedInterval(-1 ,1), ClosedInterval(-1 ,1), ClosedInterval(-1 ,1))) # TODO change back to Inf,-Inf
+    _I = Integral(tuple(vs...) in DomainSets.ProductDomain(ClosedInterval(-Inf ,Inf), ClosedInterval(-Inf ,Inf), ClosedInterval(-Inf ,Inf)))
 
     # differentials
     Dxs = Differential.(xs)
@@ -125,13 +127,18 @@ function solve(plasma::CollisionlessPlasma;
     div_B_eq = div_B ~ 0
     eqs = [vlasov_eqs; curl_E_eqs; curl_B_eqs; div_E_eq; div_B_eq]
 
-    # boundary and initial conditions
-    vlasov_ics = [fs[i](0,xs...,vs...) ~ Ps[i](xs,vs) * geometry(xs) for i in eachindex(fs)]
-    div_B_ic = div_B ~ 0
-    div_E_ic = div_E ~ sum([qs[i] * _I(fs[i](0,xs...,vs...)) for i in eachindex(qs)])/ϵ_0 * geometry(xs)
-    
-    bcs = [vlasov_ics; div_B_ic; div_E_ic]
+    # boundary conditions
+    div_E0 = sum([Dxs[i](Es[i](time_lb, xs...)) for i in eachindex(Dxs)])
+    div_B0 = sum([Dxs[i](Bs[i](time_lb, xs...)) for i in eachindex(Dxs)])
 
+    vlasov_ics = [fs[i](time_lb,xs...,vs...) ~ Ps[i](xs,vs) * geometry(xs) for i in eachindex(fs)]
+    div_B_ic = div_B0 ~ 0
+    div_E_ic =  div_E0 ~ sum([qs[i] * _I(fs[i](time_lb,xs...,vs...)) for i in eachindex(qs)])/ϵ_0 * geometry(xs)
+    E_bcs = [E_bcs(t, xs, Dxs, Es, lb); E_bcs(t, xs, Dxs, Es, ub)]
+    f_bcs = [Reflective(t, xs, vs, fs, lb, f_bcs.a, f_bcs.g); Reflective(t, xs, vs, fs, ub, f_bcs.a, f_bcs.g)]
+    bcs = [vlasov_ics;div_B_ic; div_E_ic; E_bcs; f_bcs]
+
+    # get variables
     vars_arg = [_fs...; _Es...; _Bs...]
     vars = [fs, Bs, Es]
     
@@ -180,7 +187,9 @@ strategy – what NeuralPDE training strategy should be used
 """
 function solve(plasma::ElectrostaticPlasma; 
     lb=0.0, ub=1.0, time_lb=lb, time_ub=ub, 
-    dim=3, GPU=true, inner_layers=16, strategy=QuadratureTraining())
+    dim=3, GPU=true, inner_layers=16, strategy=QuadratureTraining(),
+    E_bcs=Neumann,f_bcs=(a=1, g=0))
+
     if lb > ub
         error("lower bound must be larger than upper bound")
     end
@@ -202,7 +211,7 @@ function solve(plasma::ElectrostaticPlasma;
     ϵ_0 = consts.ϵ_0
 
     # get qs, ms, Ps from species
-    qs, ms = [], []
+    qs, ms = Float64[], Float64[]
     for s in species
         push!(qs,s.q)
         push!(ms,s.m)
@@ -219,10 +228,10 @@ function solve(plasma::ElectrostaticPlasma;
 
     # integrals
     _I = if length(vs) > 1
-        intervals = [ClosedInterval(-1 ,1) for _ in 1:length(vs)] # TODO change back to Inf,-Inf
+        intervals = [ClosedInterval(-Inf ,Inf) for _ in 1:length(vs)]
         _I = Integral(tuple(vs...) in DomainSets.ProductDomain(intervals...))
     else
-        _I = Integral(first(vs) in DomainSets.ClosedInterval(-1 ,1)) # TODO change back to Inf,-Inf
+        _I = Integral(first(vs) in DomainSets.ClosedInterval(-Inf ,Inf))
     end
 
     # differentials
@@ -257,11 +266,14 @@ function solve(plasma::ElectrostaticPlasma;
     eqs = [vlasov_eqs; div_E_eq]
 
     # boundary and initial conditions
-    vlasov_ics = [fs[i](0,xs...,vs...) ~ Ps[i](xs,vs) * geometry(xs) for i in eachindex(fs)]
-    div_E_ic = div_E ~ sum([qs[i] * _I(fs[i](0,xs...,vs...)) for i in eachindex(qs)])/ϵ_0 * geometry(xs) 
-    # TODO does E need boundary conditions?
+    div_E0 = sum([Dxs[i](Es[i](time_lb, xs...)) for i in eachindex(Dxs)])
 
-    bcs = [vlasov_ics; div_E_ic]
+    vlasov_ics = [fs[i](time_lb,xs...,vs...) ~ Ps[i](xs,vs) * geometry(xs) for i in eachindex(fs)]
+    div_E_ic = div_E0 ~ sum([qs[i] * _I(fs[i](time_lb,xs...,vs...)) for i in eachindex(qs)])/ϵ_0 * geometry(xs)
+
+    f_bcs = [Reflective(t, xs, vs, fs, lb, f_bcs.a, f_bcs.g); Reflective(t, xs, vs, fs, ub, f_bcs.a, f_bcs.g)]
+    E_bcs = [E_bcs(t, xs, Dxs, Es, lb); E_bcs(t, xs, Dxs, Es, ub)]
+    bcs = [vlasov_ics; div_E_ic; E_bcs; f_bcs]
 
     # set up variables
     vars_arg = [_fs; _Es]
