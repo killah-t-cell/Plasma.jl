@@ -20,7 +20,7 @@ Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
 [compat]
 CUDA = "3"
 DiffEqFlux = "1"
-DifferentialEquations = "6"
+DifferentialEquations = "6, 7"
 DomainSets = "0.5"
 Flux = "0.12"
 GLMakie = "0.4"
