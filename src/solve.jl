@@ -49,7 +49,7 @@ function solve(plasma::CollisionlessPlasma;
                lb=0.0, ub=1.0, time_lb=lb, time_ub=ub, 
                GPU=true, inner_layers=16, strategy=QuadratureTraining(),
                E_bcs=Neumann, 
-               f_bcs=(a=1, g=0))
+               f_bcs=(a=1, g=0), maxiters=10000)
     if lb > ub
         error("lower bound must be larger than upper bound")
     end
@@ -163,7 +163,7 @@ function solve(plasma::CollisionlessPlasma;
     opt = Optim.BFGS()
     res = GalacticOptim.solve(prob, opt, cb = print_loss(timeCounter, startTime, times, losses), maxiters=200)
     prob = remake(prob, u0=res.minimizer)
-    res = GalacticOptim.solve(prob, ADAM(0.01), cb = print_loss(timeCounter, startTime, times, losses), maxiters=10000)
+    res = GalacticOptim.solve(prob, ADAM(0.01), cb = print_loss(timeCounter, startTime, times, losses), maxiters=maxiters)
     prob = remake(prob, u0=res.minimizer)
     res = GalacticOptim.solve(prob, opt, cb = print_loss(timeCounter, startTime, times, losses), maxiters=200)
     phi = discretization.phi
@@ -188,7 +188,7 @@ strategy – what NeuralPDE training strategy should be used
 function solve(plasma::ElectrostaticPlasma; 
     lb=0.0, ub=1.0, time_lb=lb, time_ub=ub, 
     dim=3, GPU=true, inner_layers=16, strategy=QuadratureTraining(),
-    E_bcs=Neumann,f_bcs=(a=1, g=0))
+    E_bcs=Neumann,f_bcs=(a=1, g=0), maxiters=10000)
 
     if lb > ub
         error("lower bound must be larger than upper bound")
@@ -300,7 +300,7 @@ function solve(plasma::ElectrostaticPlasma;
     opt = Optim.BFGS()
     res = GalacticOptim.solve(prob, opt, cb = print_loss(timeCounter, startTime, times, losses), maxiters=200)
     prob = remake(prob, u0=res.minimizer)
-    res = GalacticOptim.solve(prob, ADAM(0.01), cb = print_loss(timeCounter, startTime, times, losses), maxiters=10000)
+    res = GalacticOptim.solve(prob, ADAM(0.01), cb = print_loss(timeCounter, startTime, times, losses), maxiters=maxiters)
     prob = remake(prob, u0=res.minimizer)
     res = GalacticOptim.solve(prob, opt, cb = print_loss(timeCounter, startTime, times, losses), maxiters=200)
     phi = discretization.phi
