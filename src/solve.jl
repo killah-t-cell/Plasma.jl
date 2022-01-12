@@ -47,9 +47,9 @@ strategy – what NeuralPDE training strategy should be used
 """
 function solve(plasma::CollisionlessPlasma; 
                lb=0.0, ub=1.0, time_lb=lb, time_ub=ub, 
-               GPU=true, inner_layers=16, strategy=QuadratureTraining(),
+               GPU=true, inner_layers=16, strategy=StochasticTraining(100),
                E_bcs=Neumann, 
-               f_bcs=(a=1, g=0), maxiters=10000)
+               f_bcs=(a=1, g=0), maxiters=[30,100], normalized=true)
     if lb > ub
         error("lower bound must be larger than upper bound")
     end
@@ -78,6 +78,13 @@ function solve(plasma::CollisionlessPlasma;
         push!(ms,s.m)
     end
     Ps = [d.P for d in dis]
+
+    if normalized 
+        qs .= 1
+        ms .= 1
+        ϵ_0 = 1
+        μ_0 = 0
+    end
 
     # variables
     fs = Symbolics.variables(:f, eachindex(species); T=SymbolicUtils.FnType{Tuple,Real})
@@ -161,11 +168,9 @@ function solve(plasma::CollisionlessPlasma;
     
     # solve
     opt = Optim.BFGS()
-    res = GalacticOptim.solve(prob, opt, cb = print_loss(timeCounter, startTime, times, losses), maxiters=200)
+    res = GalacticOptim.solve(prob, opt, cb = print_loss(timeCounter, startTime, times, losses), maxiters=maxiters[1])
     prob = remake(prob, u0=res.minimizer)
-    res = GalacticOptim.solve(prob, ADAM(0.01), cb = print_loss(timeCounter, startTime, times, losses), maxiters=maxiters)
-    prob = remake(prob, u0=res.minimizer)
-    res = GalacticOptim.solve(prob, opt, cb = print_loss(timeCounter, startTime, times, losses), maxiters=200)
+    res = GalacticOptim.solve(prob, ADAM(0.01), cb = print_loss(timeCounter, startTime, times, losses), maxiters=maxiters[2])
     phi = discretization.phi
 
 
@@ -187,8 +192,8 @@ strategy – what NeuralPDE training strategy should be used
 """
 function solve(plasma::ElectrostaticPlasma; 
     lb=0.0, ub=1.0, time_lb=lb, time_ub=ub, 
-    dim=3, GPU=true, inner_layers=16, strategy=QuadratureTraining(),
-    E_bcs=Neumann,f_bcs=(a=1, g=0), maxiters=10000)
+    dim=3, GPU=true, inner_layers=16, strategy=StochasticTraining(80*dim),
+    E_bcs=Neumann,f_bcs=(a=1, g=0), maxiters=[30,100], normalized=true)
 
     if lb > ub
         error("lower bound must be larger than upper bound")
@@ -217,6 +222,12 @@ function solve(plasma::ElectrostaticPlasma;
         push!(ms,s.m)
     end
     Ps = [d.P for d in dis]
+
+    if normalized 
+        qs .= 1
+        ms .= 1
+        ϵ_0 = 1
+    end
 
     # variables
     fs = Symbolics.variables(:f, eachindex(species); T=SymbolicUtils.FnType{Tuple,Real})
@@ -298,11 +309,9 @@ function solve(plasma::ElectrostaticPlasma;
     
     # solve
     opt = Optim.BFGS()
-    res = GalacticOptim.solve(prob, opt, cb = print_loss(timeCounter, startTime, times, losses), maxiters=200)
+    res = GalacticOptim.solve(prob, opt, cb = print_loss(timeCounter, startTime, times, losses), maxiters=maxiters[1])
     prob = remake(prob, u0=res.minimizer)
-    res = GalacticOptim.solve(prob, ADAM(0.01), cb = print_loss(timeCounter, startTime, times, losses), maxiters=maxiters)
-    prob = remake(prob, u0=res.minimizer)
-    res = GalacticOptim.solve(prob, opt, cb = print_loss(timeCounter, startTime, times, losses), maxiters=200)
+    res = GalacticOptim.solve(prob, ADAM(0.01), cb = print_loss(timeCounter, startTime, times, losses), maxiters=maxiters[2])
     phi = discretization.phi
 
     return PlasmaSolution(plasma, vars, dict_vars, phi, res, initθ, domains, losses, times)
