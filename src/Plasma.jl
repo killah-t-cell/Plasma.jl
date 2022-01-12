@@ -19,7 +19,7 @@ Dv = Differential(v)
 ε_0 = 1
 e   = 1
 m_e = 1
-vth2, vs1, vs2 = sqrt(2), 1.6, -1.4
+vth2, vs1, vs2 = 0.02, 1.6, -1.4
 # Integrals
 Iv = Integral(v in ClosedInterval(-Inf, Inf)) 
 eqs = [Dt(f(t,x,v)) + v * Dx(f(t,x,v)) + e/m_e * E(t,x) * Dv(f(t,x,v)) ~ 0
@@ -104,7 +104,7 @@ function plot_E(phi, minimizers_)
 end
 plot_E(phi, minimizers_)
 plot_f(phi, minimizers_)
-1
+
 # Sanity checks
 u_predict_E = [phi[2]([t,x], minimizers_[2])[1] for t in ts for x in xs]
 u_predict_f = [phi[1]([t,x,v], minimizers_[1])[1] for t in ts for x in xs for v in vs]
