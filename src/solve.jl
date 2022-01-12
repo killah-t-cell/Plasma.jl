@@ -82,8 +82,8 @@ function solve(plasma::CollisionlessPlasma;
     if normalized 
         qs .= 1
         ms .= 1
-        ϵ_0 .= 1
-        μ_0 .= 0
+        ϵ_0 = 1
+        μ_0 = 0
     end
 
     # variables
@@ -226,7 +226,7 @@ function solve(plasma::ElectrostaticPlasma;
     if normalized 
         qs .= 1
         ms .= 1
-        ϵ_0 .= 1
+        ϵ_0 = 1
     end
 
     # variables
