@@ -4,7 +4,6 @@ using Flux
 using ModelingToolkit
 using GalacticOptim
 using DiffEqFlux
-using GLMakie
 using CUDA
 using NeuralPDE
 using LinearAlgebra
@@ -134,7 +133,7 @@ include("distribution.jl")
 include("boundaries.jl")
 include("solve.jl")
 include("geometry.jl")
-include("analyze.jl")
+#include("analyze.jl")
 
 export CollisionlessPlasma, ElectrostaticPlasma, PlasmaSolution
 export Distribution, Maxwellian
