@@ -115,6 +115,9 @@ Plasma.solve(plasma)
 Plasma.plot(sol)
 ```
 
+## Plotting
+You can build your own plotting functions, or check out `src/analyze.jl` for a fairly crude way to plot models with Makie. A Makie recipe is a WIP right now.
+
 ## Benchmarks
 
 See [PlasmaBenchmarks.jl](https://github.com/killah-t-cell/PlasmaBenchmarks.jl) for solved examples and benchmarks against PIC methods w.r.t. performance and accuracy.
