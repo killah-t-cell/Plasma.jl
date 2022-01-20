@@ -56,3 +56,4 @@ function Reflective(t, xs, vs, Fs, bc, a, g)
     return bcs
 end
 
+# TODO periodic boundary
