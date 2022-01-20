@@ -33,7 +33,7 @@ function get_predicts(sol, dx)
     return predicts
 end
 
-
+#=
 """
 Plots a plasma given a PlasmaSolution object
 """
@@ -101,3 +101,4 @@ function plot_with_makie(var, predict, ts)
 
     display(f)
 end
+=#
