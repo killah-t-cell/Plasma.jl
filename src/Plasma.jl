@@ -48,13 +48,13 @@ bcs = [f(0,x,v) ~ #=0.5/sqrt(vth2 * π) * exp(-(v-vs1)*(v-vs1)/vth2) + =# 0.5/sq
 # Attempt 2: Had not normalized it but had no good boundary conditions. Behaved Plasma-like but failed
 # Attempt 3: added periodic boundary conditions for E and Dx(E)
 domains = [t ∈ Interval(0.0, 10.0),
-           x ∈ Interval(-5.0, 5.0), 
-           v ∈ Interval(-5.0, 5.0)]
+           x ∈ Interval(0.0, 10.0), 
+           v ∈ Interval(0.0, 10.0)]
 # Neural Network
 chain = [FastChain(FastDense(3, 64, Flux.σ), FastDense(64,64,Flux.σ), FastDense(64, 1)),
          FastChain(FastDense(2, 64, Flux.σ), FastDense(64,64,Flux.σ), FastDense(64, 1))]
 initθ = map(c -> Float64.(c), DiffEqFlux.initial_params.(chain))
-discretization = NeuralPDE.PhysicsInformedNN(chain, StochasticTraining(80), init_params= initθ)
+discretization = NeuralPDE.PhysicsInformedNN(chain, StochasticTraining(250), init_params= initθ)
 @named pde_system = PDESystem(eqs, bcs, domains, [t,x,v], [f(t,x,v), E(t,x)])
 prob = SciMLBase.symbolic_discretize(pde_system, discretization)
 prob = SciMLBase.discretize(pde_system, discretization)
@@ -85,6 +85,10 @@ acum =  [0;accumulate(+, Base.length.(initθ))]
 sep = [acum[i]+1 : acum[i+1] for i in 1:Base.length(acum)-1]
 minimizers_ = [res.minimizer[s] for s in sep]
 
+u_predict_E = [phi[2]([t,x], minimizers_[2])[1] for t in ts for x in xs]
+u_predict_f = [phi[1]([0,x,v], minimizers_[1])[1] for x in xs for v in vs]
+sum(u_predict_f)
+
 function plot_f(phi, minimizers_)
     anim = @animate for t ∈ ts
         @info "Animating frame $t..."
@@ -109,6 +113,7 @@ function plot_E2(phi, minimizers_)
     plot(p1)
 end
 
+#=
 function plot_conservation_laws(phi, minimizers_)
     np_f = reshape([phi[1]([t,x,v], minimizers_[1])[1] for x in xs for v in vs], Base.length(xs), Base.length(vs))
     np_e = reshape([phi[2]([t,x], minimizers_[2])[1] for t in ts for x in xs], length(ts), length(xs))
@@ -128,6 +133,7 @@ function plot_conservation_laws(phi, minimizers_)
 
     # save figures
 end
+=#
 
 plot_conservation_laws(phi, minimizers_)
 plot_E(phi, minimizers_)
@@ -138,5 +144,11 @@ plot_f(phi, minimizers_)
 u_predict_E = [phi[2]([t,x], minimizers_[2])[1] for t in ts for x in xs]
 u_predict_f = [phi[1]([0,x,v], minimizers_[1])[1] for x in xs for v in vs]
 sum(u_predict_f)
+
+
+kg_per_kw = 1
+cost_per_kg = 20
+(kg_per_kw*cost_per_kg)/1000
+
 
 end
