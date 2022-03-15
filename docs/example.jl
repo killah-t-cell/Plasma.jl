@@ -1,4 +1,5 @@
 using Plasma
+using NeuralPDE
 
 TD = 30000 # eV
 Te = 10000 # eV
@@ -23,9 +24,8 @@ Tα = 70000 # eV
 
 α = Species(1.602176634e-19, 6.6446562e-27)
 
-function HotCarrier(T) 
-    Kb = 8.617333262145e-5
-    P(x,v) = exp(-v/(Kb*T))
+function TwoStreamBenchmark(T) 
+    P(x,v) = 0.5/sqrt(vth2 * π) * exp(-(v-vs2)*(v-vs2)/vth2) * (1+0.02*cos(3*π*x/4))
 end
 
 Dα = Distribution(HotCarrier(Tα), α)
@@ -59,3 +59,31 @@ plasma = CollisionlessPlasma([De,DT,DD], G)
 Plasma.solve(plasma)
 
 Plasma.plot(sol)
+
+### 
+e = species.e
+
+function TwoStream(vth2, vs1, vs2) 
+
+    function P(x,v)
+        if !(v isa Array)
+            v = [v]    
+        end
+
+        if !(x isa Array)
+            x = [x]    
+        end
+
+        v = sqrt(sum(v .^2))
+        x = sqrt(sum(x .^2))
+
+        0.5/sqrt(vth2 * π) * exp(-(v-vs1)*(v-vs1)/vth2) + 0.5/sqrt(vth2 * π) * exp(-(v-vs2)*(v-vs2)/vth2) * (1+0.02*cos(3*π*x))
+    end
+end
+
+D_e = Distribution(TwoStream(0.02, 1.6, -1.4), e) 
+G = Geometry() 
+
+plasma = ElectrostaticPlasma([D_e], G)
+
+sol = Plasma.solve(plasma, dim=1, GPU=false, time_ub = 2.0, ub=2.0, strategy=StochasticTraining(200)) 
