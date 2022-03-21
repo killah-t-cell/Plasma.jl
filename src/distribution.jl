@@ -5,9 +5,6 @@ Temperature in eV
 mass in Kg
 """
 function Maxwellian(T, m; v_drift=zeros())
-        Kb = 8.617333262145e-5
-        v_th = sqrt(2*Kb*T/m)
-
         function P(x,v) 
             if !(v isa Array)
                 v = [v]    
@@ -24,6 +21,6 @@ function Maxwellian(T, m; v_drift=zeros())
             v_ = sqrt(sum(v .^2))
             v_drift_ = sqrt(sum(v_drift.^2))
 
-            (π*v_th^2)^(-3/2) * exp(-(v_ - v_drift_)^2/v_th^2)
+            1/(2*π*T) * exp(-(v_ - v_drift_)^2/(2*T))
         end
 end
