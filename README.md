@@ -31,34 +31,20 @@ julia> Pkg.add("Plasma")
 ## Example: Solving 3D Electrostatic D-D Plasma
 
 ```julia
+using Plasma
+
+TD = 0.3 # eV
+Te = 0.2 # eV
+D = species.D
 e = species.e
 
-function TwoStream(vth2, vs1, vs2) 
-
-    function P(x,v)
-        if !(v isa Array)
-            v = [v]    
-        end
-
-        if !(x isa Array)
-            x = [x]    
-        end
-
-        v = sqrt(sum(v .^2))
-        x = sqrt(sum(x .^2))
-
-        0.5/sqrt(vth2 * π) * exp(-(v-vs1)*(v-vs1)/vth2) + 0.5/sqrt(vth2 * π) * exp(-(v-vs2)*(v-vs2)/vth2) * (1+0.02*cos(3*π*x))
-    end
-end
-
-D_e = Distribution(TwoStream(0.02, 1.6, -1.4), e) 
+D_D = Distribution(Maxwellian(TD, D.m), D)
+D_e = Distribution(Maxwellian(Te, e.m), e) 
 G = Geometry() 
 
-plasma = ElectrostaticPlasma([D_e], G)
+plasma = ElectrostaticPlasma([D_D, D_e], G)
 
-sol = Plasma.solve(plasma, dim=1, GPU=false, time_ub = 100.0, ub=2.0) 
-
-Plasma.plot(sol, 0.01)
+sol = Plasma.solve(plasma, dim=1, GPU=false, strategy=QuadratureTraining()) 
 ```
 
 ## Example: Solving 5D Electrostatic α Plasma with a Custom Initial Distribution
