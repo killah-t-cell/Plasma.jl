@@ -43,8 +43,8 @@ bcs = [f(0,x,v) ~ 1/2*(1/(sqrt(2*π)*vs1)*exp(-(v-vs2)^2)/(2*vs1^2) + 1/(sqrt(2*
 # Attempt 5: removed permitivity of free space
 
 domains = [t ∈ Interval(0.0, 4.0),
-           x ∈ Interval(0.0, 4.0), 
-           v ∈ Interval(0.0, 4.0)]
+           x ∈ Interval(-4.0, 4.0), 
+           v ∈ Interval(-4.0, 4.0)]
 # Neural Network
 chain = [FastChain(FastDense(3, 64, Flux.σ), FastDense(64,64,Flux.σ), FastDense(64, 1)),
          FastChain(FastDense(2, 64, Flux.σ), FastDense(64,64,Flux.σ), FastDense(64, 1))]
