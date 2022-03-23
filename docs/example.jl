@@ -1,8 +1,11 @@
 using Plasma
 using Plots
+using JSON
+using NeuralPDE
+import ModelingToolkit: Interval, infimum, supremum
 
 TD = 0.3
-Te = 0.1
+Te = 0.2
 D = species.D
 e = species.e
 
@@ -10,11 +13,40 @@ D_D = Distribution(Maxwellian(TD, D.m), D)
 D_e = Distribution(Maxwellian(Te, e.m), e) 
 G = Geometry() 
 
-plasma = ElectrostaticPlasma([D_D, D_e], G)
+plasma = ElectrostaticPlasma([D_e], G)
 
-sol = Plasma.solve(plasma, dim=1, GPU=false) 
+sol = Plasma.solve(plasma, dim=1, GPU=false, strategy=QuadratureTraining(), maxiters=[80, 1], time_ub = 5) 
+sol.res
+data = Dict("res"=>sol.res)
+json_string = JSON.json(data)
 
-Plasma.plot(sol)
+open("model_march_quadrature_5t_maxwellian.json","w") do f
+    JSON.print(f, json_string, 4)
+end
+
+# plot
+vcat(sol.vars...)
+f_predict = Plasma.get_predicts(sol, 0.01)[vcat(sol.vars...)[1]]
+ts, xs, vs = [infimum(sol.domains[d].domain):0.01:supremum(sol.domains[d].domain) for d in 1:length(sol.domains)]
+
+f_predict[4, :, :]
+function plot_f()
+    anim = @animate for t in eachindex(ts)
+        @info "Animating frame $t..."
+        p1 = heatmap(xs, vs, f_predict[t, :, :], label="$t", title="f_$t")
+        plot(p1)
+    end
+    gif(anim,"f_quadrature_maxwellian.gif", fps=30)
+end
+plot_f()
+
+# save
+data = Dict("sol"=>sol)
+json_string = JSON.json(data)
+
+open("f_quadrature_maxwellian_model_sol.json","w") do f
+    JSON.print(f, json_string, 4)
+end
 
 ## Two-stream instability
 

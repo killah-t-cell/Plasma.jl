@@ -1,145 +1,155 @@
 module Plasma
 
-using Flux
 using ModelingToolkit
+using Flux
+using NeuralPDE
 using GalacticOptim
 using DiffEqFlux
-using CUDA
-using NeuralPDE
-using LinearAlgebra
 using DomainSets
 import ModelingToolkit: Interval, infimum, supremum
+using Plots
+using JSON
 
-abstract type AbstractPlasma end
+@parameters t x v
+@variables f(..) E(..) 
+Dx = Differential(x)
+Dt = Differential(t)
+Dv = Differential(v)
+# Constants
+ε_0 = 8.85418782e-12
+e   = 1
+len = 10
+m_e = 1
+vth2, vs1, vs2 = 0.02, 0.6, 0.2
 
-abstract type AbstractGeometry end
+# Integrals
+Iv = Integral(v in ClosedInterval(-Inf, Inf)) 
+eqs = [Dt(f(t,x,v)) + v * Dx(f(t,x,v)) + e/m_e * E(t,x) * Dv(f(t,x,v)) ~ 0
+       Dx(E(t,x)) ~ Iv(f(t,x,v))]
+       #Dirichlet boundary
+bcs = [f(0,x,v) ~ 1/2*(1/(sqrt(2*π)*vs1)*exp(-(v-vs2)^2)/(2*vs1^2) + 1/(sqrt(2*π)*vs1)*exp(-(v+vs2)^2)/(2*vs1^2)),
+       Dx(E(0,x)) ~ e*ε_0 * Iv(f(0,x,v)),
+       E(t, -4.0) ~ 0.,
+       E(t, 4.0) ~ 0.,
+       f(t,-4.0,v) ~ - f(t,-4.0,v),
+       f(t,4.0,v) ~ - f(t,4.0,v),
+       f(t,x,-4.0) ~ - f(t,x,-4.0),
+       f(t,x,4.0) ~ - f(t,x,4.0)]
+ 
+# Attempt 1: had not normalized it and failed
+# Attempt 2: Had not normalized it but had no good boundary conditions. Behaved Plasma-like but failed
+# Attempt 3: added dirichlet boundary conditions for E
+# Attempt 4: made f reflective
+# Attempt 5: removed permitivity of free space
 
-abstract type AbstractDistribution end
+domains = [t ∈ Interval(0.0, 4.0),
+           x ∈ Interval(-4.0, 4.0), 
+           v ∈ Interval(-4.0, 4.0)]
+# Neural Network
+chain = [FastChain(FastDense(3, 64, Flux.σ), FastDense(64,64,Flux.σ), FastDense(64, 1)),
+         FastChain(FastDense(2, 64, Flux.σ), FastDense(64,64,Flux.σ), FastDense(64, 1))]
+initθ = map(c -> Float64.(c), DiffEqFlux.initial_params.(chain))
+adaptive_loss = NeuralPDE.MiniMaxAdaptiveLoss(5; pde_loss_weights=1e-3, bc_loss_weights=1e3)
+discretization = NeuralPDE.PhysicsInformedNN(chain, QuadratureTraining(), init_params= initθ, adaptive_loss = adaptive_loss)
+@named pde_system = PDESystem(eqs, bcs, domains, [t,x,v], [f(t,x,v), E(t,x)])
+prob = SciMLBase.symbolic_discretize(pde_system, discretization)
+prob = SciMLBase.discretize(pde_system, discretization)
 
-abstract type AbstractCoil end
+pde_inner_loss_functions = prob.f.f.loss_function.pde_loss_function.pde_loss_functions.contents
+bcs_inner_loss_functions = prob.f.f.loss_function.bcs_loss_function.bc_loss_functions.contents
 
-"""
-Species holds
+cb = function (p,l)
+    println("loss: ", l )
+    println("pde_losses: ", map(l_ -> l_(p), pde_inner_loss_functions))
+    println("bcs_losses: ", map(l_ -> l_(p), bcs_inner_loss_functions))
+    return false
+end
+# Solve
+opt = Optim.BFGS()
+res = GalacticOptim.solve(prob, opt, cb = cb, maxiters=40)
+prob = remake(prob, u0=res.minimizer)
+res = GalacticOptim.solve(prob, ADAM(0.01), cb = cb, maxiters=15)
+prob = remake(prob, u0=res.minimizer)
+res = GalacticOptim.solve(prob, opt, cb = cb, maxiters=32)
+phi = discretization.phi
 
-q – charge in C
-m – mass in Kg
+# save
+data = Dict("res"=>res)
+json_string = JSON.json(data)
 
-to describe a particle species
-"""
-struct Species{ T <: Number }
-    q::T # charge in C
-    m::T # mass in Kg
+open("model_march_quadrature_4t_newf0_minimax_two_stream.json","w") do f
+    JSON.print(f, json_string, 4)
+end
 
-    function Species(q=-1.602176634e-19, m=9.10938188e-31)
-        new{typeof(q)}(
-            q, m
-        )
+# Plot
+ts, xs, vs = [infimum(d.domain):0.1:supremum(d.domain) for d in domains]
+acum =  [0;accumulate(+, Base.length.(initθ))]
+sep = [acum[i]+1 : acum[i+1] for i in 1:Base.length(acum)-1]
+minimizers_ = [res[s] for s in sep]
+
+function plot_f(phi, minimizers_)
+    anim = @animate for t ∈ ts
+        @info "Animating frame $t..."
+        u_predict_f = reshape([phi[1]([t,x,v], minimizers_[1])[1] for x in xs for v in vs], Base.length(xs), Base.length(vs))
+        p1 = heatmap(xs, vs, u_predict_f,label="$t", title="f")
+        plot(p1)
     end
+    gif(anim,"f_quadrature_4t_newf0_minimax_two_stream.gif", fps=30)
 end
-
-"""
-Velocity distribution of particles
-
-P – probability function
-species – which species of particle
-"""
-struct Distribution <: AbstractDistribution
-    P::Function
-    species::Species
-end
-
-"""
-Describes the initial geometry of a plasma
-
-f – conditional function
-
-# Example
-
-Geometry(x -> x > 0.4 ? 1. : 0)
-"""
-struct Geometry{F <: Function} <: AbstractGeometry
-    f::F
-
-    function Geometry(f= _ -> 1)
-        new{typeof(f)}(f)
+function plot_E(phi, minimizers_)
+    anim = @animate for t ∈ ts
+        @info "Animating frame $t..."
+        u_predict_E = reshape([phi[2]([t,x], minimizers_[2])[1] for x in xs], length(xs))
+        p1 = plot(xs, u_predict_E, label="", title="E")
+        plot(p1)
     end
+    gif(anim,"E_quadrature_4t_newf0_minimax_two_stream.gif", fps=30)
+end
+function plot_E2(phi, minimizers_)
+    u_predict_E = reshape([phi[2]([t,x], minimizers_[2])[1] for t in ts for x in xs], length(ts), length(xs))
+    p1 = plot(xs, ts, u_predict_E, linetype=:surface, title="E")
+    plot(p1)
 end
 
-"""
-CollisionlessPlasma object that can be passed to Plasma.solve for simulation
+function plot_conservation_laws(phi, minimizers_)
+    # for each point in time
+    # give me the sum of all distributions functions
+    # save it in an array so that [t=0 -> sum(at time time 0), t=0.1 -> ...]
+    # plot against t
+    np_f = [sum(reshape([phi[1]([t,x,v], minimizers_[1])[1] for x in xs for v in vs], Base.length(xs), Base.length(vs))) for t in ts]
+    np_e = [sum(reshape([phi[2]([t,x], minimizers_[2])[1] for x in xs], length(xs))) for t in ts]
+    
+    mass = np_f
+    momentum = np_f .* vs
+    kinetic_energy = 0.5 .* np_f .* vs.^2
+    electric_energy = 0.5 .* np_e.^2
+    total_energy = kinetic_energy .+ electric_energy
+    
 
-It takes a geometry and a vector of distributions (one for every particle).
-"""
-struct CollisionlessPlasma{ G <: AbstractGeometry } <: AbstractPlasma
-    distributions::Vector{Distribution}
-    geometry::G
+    # plot conservation law vs. time
+    plot_mass = plot(ts, mass, xlabel="time", ylabel="mass")
+    plot_momentum = plot(ts, momentum, xlabel="time", ylabel="momentum")
+    plot_energy = plot(ts, [kinetic_energy, electric_energy, total_energy], xlabel="time", ylabel="energy")
+    plot!(plot_mass, plot_momentum, plot_energy)
+    savefig("conservations_quadrature_4t_newf0_minimax_two_stream") # save the current fig as png with filename conservations
 end
 
-"""
-ElectrostaticPlasma object that can be passed to Plasma.solve for simulation
+np_f = [sum(reshape([phi[1]([t,x,v], minimizers_[1])[1] for x in xs for v in vs], Base.length(xs), Base.length(vs))) for t in ts]
+np_e = [sum(reshape([phi[2]([t,x], minimizers_[2])[1] for x in xs], length(xs))) for t in ts]
+mass = np_f
+momentum = np_f .* vs
+kinetic_energy = 0.5 .* np_f .* vs.^2
+electric_energy = 0.5 .* np_e.^2
+total_energy = kinetic_energy .+ electric_energy
+plot_mass = plot(ts, mass, xlabel="time", ylabel="mass")
+plot_momentum = plot(ts, momentum, xlabel="time", ylabel="momentum")
+plot_energy = plot(ts, [kinetic_energy, electric_energy, total_energy], xlabel="time", ylabel="energy")
+plot(plot_mass, plot_momentum, plot_energy)
+savefig("conservations_quadrature_4t_newf0_minimax_two_stream")
 
-It takes a geometry and a vector of distributions (one for every particle).
-"""
-struct ElectrostaticPlasma{ G <: AbstractGeometry } <: AbstractPlasma
-    distributions::Vector{Distribution}
-    geometry::G
-end
-
-"""
-Object to hold (and save) the results of Plasma.solve.
-
-It consists of
-
-plasma – CollisionlessPlasma or ElectrostaticPlasma object
-vars – dependent variables
-dict_vars – dictionary of dependent variables
-phi – trained trial solution that approximates plasma movement
-res – result of optimization
-initθ – weights of the neural network
-domains – domains of the simulation
-"""
-struct PlasmaSolution{ P <: AbstractPlasma, V, DV, PHI, RE, IN, DO, LO, TI }
-    plasma::P
-    vars::V
-    dict_vars::DV
-    phi::PHI
-    res::RE
-    initθ::IN
-    domains::DO
-    losses::LO
-    times::TI
-end
-struct Constants{ T <: Number}
-    μ_0::T
-    ϵ_0::T
-
-    function Constants()
-        μ_0 = 1.25663706212e-6 # N A⁻²
-        ϵ_0 = 8.8541878128e-12 # F ms⁻¹
-        new{typeof(μ_0)}(μ_0, ϵ_0)
-    end
-end
-
-const species = (
-    e = Species(),
-    p = Species(1.602176634e-19 ,1.673523647e-27),
-    D = Species(1.602176634e-19 ,3.344476425e-27),
-    T = Species(1.602176634e-19 ,5.00735588e-27),
-    He³ = Species(1.602176634e-19 ,5.00641192e-27),
-    He⁴ = Species(1.602176634e-19 ,6.64465620e-27),
-)
-
-include("distribution.jl")
-include("boundaries.jl")
-include("solve.jl")
-include("geometry.jl")
-include("analyze.jl")
-
-export CollisionlessPlasma, ElectrostaticPlasma, PlasmaSolution
-export Distribution, Maxwellian
-export Neumann, Dirichlet, Reflective
-export Geometry
-export Species, species
-export Constants
+plot_conservation_laws(phi, minimizers_)
+plot_E2(phi, minimizers_)
+plot_E(phi, minimizers_)
+plot_f(phi, minimizers_)
 
 end
